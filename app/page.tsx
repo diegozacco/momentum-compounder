@@ -89,7 +89,7 @@ interface JournalEntry {
   tags: string[];
 }
 
-type PageId = "dashboard" | "scanner" | "trade" | "rotation" | "journal";
+type PageId = "dashboard" | "scanner" | "trade" | "rotation" | "journal" | "methodology";
 type BadgeColor = "accent" | "red" | "amber" | "gray" | "purple";
 type IconName =
   | "dashboard"
@@ -97,6 +97,7 @@ type IconName =
   | "trade"
   | "rotation"
   | "journal"
+  | "methodology"
   | "logout"
   | "chevron"
   | "fire"
@@ -254,6 +255,13 @@ function Icon({
         <polyline points="14 2 14 8 20 8" fill="none" stroke={color} strokeWidth="2" />
         <line x1="16" y1="13" x2="8" y2="13" stroke={color} strokeWidth="2" />
         <line x1="16" y1="17" x2="8" y2="17" stroke={color} strokeWidth="2" />
+      </>
+    ),
+    methodology: (
+      <>
+        <circle cx="12" cy="12" r="10" fill="none" stroke={color} strokeWidth="2" />
+        <line x1="12" y1="16" x2="12" y2="12" stroke={color} strokeWidth="2" />
+        <line x1="12" y1="8" x2="12.01" y2="8" stroke={color} strokeWidth="2" />
       </>
     ),
     logout: (
@@ -686,6 +694,7 @@ function AppLayout({
     { id: "trade", label: "Trade Detail", icon: "trade" },
     { id: "rotation", label: "Rotation", icon: "rotation" },
     { id: "journal", label: "Journal", icon: "journal" },
+    { id: "methodology", label: "Methodology", icon: "methodology" },
   ];
 
   const Nav = ({ mobile = false }: { mobile?: boolean }) => (
@@ -1651,12 +1660,352 @@ function JournalPage() {
   );
 }
 
+// ━━━ ONBOARDING PAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function OnboardingPage({ onComplete }: { onComplete: (profile: { firstName: string; lastName: string; experience: string; goal: string }) => void }) {
+  const [step, setStep] = useState(1);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [experience, setExperience] = useState("");
+  const [goal, setGoal] = useState("");
+  const [accepted, setAccepted] = useState(false);
+
+  const experienceLevels = [
+    { value: "beginner", label: "Beginner", desc: "New to trading, still learning the basics" },
+    { value: "intermediate", label: "Intermediate", desc: "1-3 years, comfortable with core concepts" },
+    { value: "advanced", label: "Advanced", desc: "3+ years, developed trading systems" },
+    { value: "professional", label: "Professional", desc: "Full-time trader or finance professional" },
+  ];
+
+  const goals = [
+    { value: "day-trading", label: "Day Trading", desc: "Intraday momentum plays, quick entries and exits" },
+    { value: "swing-trading", label: "Swing Trading", desc: "Multi-day holds, riding trends for larger moves" },
+    { value: "long-term", label: "Long-Term Growth", desc: "Position building, compounding winners over weeks/months" },
+    { value: "following-reads", label: "Following the Data", desc: "Using scanner signals and rotation data to inform decisions" },
+  ];
+
+  return (
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ background: C.bg }}>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]"
+        style={{ background: `radial-gradient(circle, ${C.accent} 0%, transparent 70%)` }} />
+      <div className="absolute inset-0 opacity-[0.03]"
+        style={{ backgroundImage: `linear-gradient(${C.text} 1px, transparent 1px), linear-gradient(90deg, ${C.text} 1px, transparent 1px)`, backgroundSize: "60px 60px" }} />
+
+      <div className="relative z-10 w-full max-w-lg mx-4">
+        {/* Progress bar */}
+        <div className="flex items-center gap-2 mb-8">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className="flex-1 h-1 rounded-full" style={{ background: s <= step ? C.accent : C.surface3, transition: "all 0.3s" }} />
+          ))}
+          <span className="text-[10px] font-mono ml-2" style={{ color: C.textDim }}>Step {step}/3</span>
+        </div>
+
+        {/* Step 1: Name */}
+        {step === 1 && (
+          <Card className="p-8" style={{ background: "rgba(18,19,26,0.8)", backdropFilter: "blur(20px)" }}>
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4"
+                style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.blue})`, boxShadow: `0 0 30px ${C.accentGlow}` }}>
+                <span className="text-black font-black text-2xl font-display">M</span>
+              </div>
+              <h2 className="text-xl font-extrabold font-display" style={{ color: C.text }}>Welcome to Momentum</h2>
+              <p className="text-sm mt-2 font-display" style={{ color: C.textMuted }}>Let's set up your profile</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-2 font-mono" style={{ color: C.textMuted }}>First Name</label>
+                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all font-mono"
+                  style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}
+                  onFocus={(e) => { e.target.style.borderColor = C.accent; }}
+                  onBlur={(e) => { e.target.style.borderColor = C.border; }}
+                  placeholder="Diego" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-2 font-mono" style={{ color: C.textMuted }}>Last Name</label>
+                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all font-mono"
+                  style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}
+                  onFocus={(e) => { e.target.style.borderColor = C.accent; }}
+                  onBlur={(e) => { e.target.style.borderColor = C.border; }}
+                  placeholder="Zacco" />
+              </div>
+              <button onClick={() => { if (firstName && lastName) setStep(2); }}
+                disabled={!firstName || !lastName}
+                className="w-full py-3.5 rounded-lg text-sm font-bold uppercase tracking-wider transition-all font-display mt-4"
+                style={{
+                  background: firstName && lastName ? `linear-gradient(135deg, ${C.accent}, #00b894)` : C.surface3,
+                  color: firstName && lastName ? "#000" : C.textDim,
+                  boxShadow: firstName && lastName ? `0 4px 20px ${C.accentGlow}` : "none",
+                }}>
+                Continue
+              </button>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 2: Experience + Goal */}
+        {step === 2 && (
+          <Card className="p-8" style={{ background: "rgba(18,19,26,0.8)", backdropFilter: "blur(20px)" }}>
+            <h2 className="text-lg font-extrabold font-display mb-1" style={{ color: C.text }}>Your Trading Profile</h2>
+            <p className="text-sm mb-6 font-display" style={{ color: C.textMuted }}>Help us tailor your experience</p>
+
+            <div className="mb-6">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-3 font-mono" style={{ color: C.textMuted }}>Experience Level</label>
+              <div className="space-y-2">
+                {experienceLevels.map((lvl) => (
+                  <button key={lvl.value} onClick={() => setExperience(lvl.value)}
+                    className="w-full text-left p-3 rounded-lg transition-all"
+                    style={{
+                      background: experience === lvl.value ? C.accentDim : C.surface2,
+                      border: `1px solid ${experience === lvl.value ? "rgba(0,212,170,0.3)" : C.border}`,
+                    }}>
+                    <span className="text-sm font-semibold font-display" style={{ color: experience === lvl.value ? C.accent : C.text }}>{lvl.label}</span>
+                    <p className="text-[11px] mt-0.5 font-display" style={{ color: C.textDim }}>{lvl.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-3 font-mono" style={{ color: C.textMuted }}>Primary Goal</label>
+              <div className="space-y-2">
+                {goals.map((g) => (
+                  <button key={g.value} onClick={() => setGoal(g.value)}
+                    className="w-full text-left p-3 rounded-lg transition-all"
+                    style={{
+                      background: goal === g.value ? C.accentDim : C.surface2,
+                      border: `1px solid ${goal === g.value ? "rgba(0,212,170,0.3)" : C.border}`,
+                    }}>
+                    <span className="text-sm font-semibold font-display" style={{ color: goal === g.value ? C.accent : C.text }}>{g.label}</span>
+                    <p className="text-[11px] mt-0.5 font-display" style={{ color: C.textDim }}>{g.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="px-4 py-3 rounded-lg text-sm font-bold uppercase font-mono"
+                style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>Back</button>
+              <button onClick={() => { if (experience && goal) setStep(3); }}
+                disabled={!experience || !goal}
+                className="flex-1 py-3 rounded-lg text-sm font-bold uppercase tracking-wider font-display"
+                style={{
+                  background: experience && goal ? `linear-gradient(135deg, ${C.accent}, #00b894)` : C.surface3,
+                  color: experience && goal ? "#000" : C.textDim,
+                  boxShadow: experience && goal ? `0 4px 20px ${C.accentGlow}` : "none",
+                }}>
+                Continue
+              </button>
+            </div>
+          </Card>
+        )}
+
+        {/* Step 3: Disclaimer */}
+        {step === 3 && (
+          <Card className="p-8" style={{ background: "rgba(18,19,26,0.8)", backdropFilter: "blur(20px)" }}>
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: C.amberDim }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-extrabold font-display" style={{ color: C.text }}>Important Disclaimer</h2>
+            </div>
+
+            <div className="p-4 rounded-lg mb-6" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+              <div className="space-y-3 text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>
+                <p>
+                  <span className="font-bold" style={{ color: C.text }}>Momentum Compounder is a research and data platform.</span> We are not a registered investment advisor, broker-dealer, or financial planner. Nothing on this platform constitutes financial, investment, legal, or tax advice.
+                </p>
+                <p>
+                  The momentum scores, scanner signals, sector rotation data, and all other information provided are for <span className="font-semibold" style={{ color: C.text }}>educational and research purposes only</span>. They represent quantitative analysis of publicly available market data, not buy or sell recommendations.
+                </p>
+                <p>
+                  <span className="font-semibold" style={{ color: C.text }}>Trading and investing involve substantial risk of loss.</span> Past performance does not guarantee future results. You should consult with a qualified financial professional before making any investment decisions.
+                </p>
+                <p>
+                  By continuing, you acknowledge that all trading decisions are your own responsibility. You understand that you may lose some or all of your invested capital.
+                </p>
+              </div>
+            </div>
+
+            <label className="flex items-start gap-3 cursor-pointer mb-6 p-3 rounded-lg transition-all"
+              style={{ background: accepted ? C.accentDim : "transparent", border: `1px solid ${accepted ? "rgba(0,212,170,0.3)" : C.border}` }}>
+              <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded accent-emerald-500" />
+              <span className="text-xs font-display" style={{ color: accepted ? C.accent : C.textMuted }}>
+                I understand that Momentum Compounder provides research data only, not financial advice. All investment decisions are my own.
+              </span>
+            </label>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(2)} className="px-4 py-3 rounded-lg text-sm font-bold uppercase font-mono"
+                style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>Back</button>
+              <button onClick={() => { if (accepted) onComplete({ firstName, lastName, experience, goal }); }}
+                disabled={!accepted}
+                className="flex-1 py-3 rounded-lg text-sm font-bold uppercase tracking-wider font-display"
+                style={{
+                  background: accepted ? `linear-gradient(135deg, ${C.accent}, #00b894)` : C.surface3,
+                  color: accepted ? "#000" : C.textDim,
+                  boxShadow: accepted ? `0 4px 20px ${C.accentGlow}` : "none",
+                }}>
+                Launch Dashboard
+              </button>
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ━━━ METHODOLOGY PAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function MethodologyPage() {
+  const scoringFactors = [
+    { name: "Daily Performance", weight: "30%", desc: "Measures the magnitude of the day's price movement. Stronger daily gains indicate active buying pressure and institutional interest. Stocks moving +3% or more receive maximum contribution from this factor.", color: C.accent },
+    { name: "Range Position", weight: "20%", desc: "Evaluates where the current price sits within the day's high-low range. Closing near the high signals sustained demand throughout the session — buyers are in control into the close.", color: C.blue },
+    { name: "Gap Strength", weight: "15%", desc: "Analyzes the overnight gap between the previous close and today's open. A strong gap up indicates overnight accumulation, news catalysts, or pre-market institutional activity driving price.", color: C.purple },
+    { name: "Intraday Trend", weight: "15%", desc: "Tracks price direction from open to current. A stock that opens and continues higher shows real conviction behind the move, not just a gap that fades.", color: C.amber },
+    { name: "Technical Alignment", weight: "20%", desc: "Cross-references multiple technical indicators to determine if the broader technical picture confirms the momentum signal. Alignment across indicators increases conviction.", color: C.accent },
+  ];
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>Methodology</h1>
+        <p className="text-sm mt-1 font-display" style={{ color: C.textMuted }}>How we identify momentum opportunities</p>
+      </div>
+
+      {/* Overview */}
+      <Card className="p-6 mb-6">
+        <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Philosophy</h2>
+        <div className="space-y-3 text-sm leading-relaxed font-display" style={{ color: C.textMuted }}>
+          <p>
+            Momentum Compounder is built on a core principle: <span className="font-semibold" style={{ color: C.text }}>stocks in motion tend to stay in motion.</span> Academic research consistently demonstrates that securities exhibiting strong recent performance tend to continue outperforming over short-to-intermediate horizons.
+          </p>
+          <p>
+            Our scanner continuously evaluates a curated universe of 30 liquid, high-beta stocks across 11 sectors. Each stock receives a <span className="font-semibold" style={{ color: C.accent }}>composite Momentum Score from 0-100</span> based on five quantitative factors analyzed in real-time from market data.
+          </p>
+          <p>
+            The system is designed to surface the strongest movers — stocks demonstrating the most conviction from buyers right now — ranked by relative strength so you can focus your research where it matters most.
+          </p>
+        </div>
+      </Card>
+
+      {/* Scoring breakdown */}
+      <Card className="p-6 mb-6">
+        <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Momentum Score Composition</h2>
+        <p className="text-xs mb-6 font-display" style={{ color: C.textMuted }}>
+          Each stock's score is computed from five weighted factors. The composite favors stocks showing strength across multiple dimensions — not just a single spike.
+        </p>
+
+        <div className="space-y-4">
+          {scoringFactors.map((factor) => (
+            <div key={factor.name} className="p-4 rounded-lg" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full" style={{ background: factor.color }} />
+                  <span className="text-sm font-bold font-display" style={{ color: C.text }}>{factor.name}</span>
+                </div>
+                <span className="text-sm font-extrabold font-mono" style={{ color: factor.color }}>{factor.weight}</span>
+              </div>
+              <p className="text-xs leading-relaxed font-display ml-5" style={{ color: C.textMuted }}>{factor.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Visual weight bar */}
+        <div className="mt-6 flex rounded-lg overflow-hidden h-3">
+          {scoringFactors.map((f) => (
+            <div key={f.name} style={{ width: f.weight, background: f.color, opacity: 0.8 }}
+              title={`${f.name}: ${f.weight}`} />
+          ))}
+        </div>
+        <div className="flex justify-between mt-2">
+          <span className="text-[9px] font-mono" style={{ color: C.textDim }}>0</span>
+          <span className="text-[9px] font-mono" style={{ color: C.textDim }}>100</span>
+        </div>
+      </Card>
+
+      {/* Score interpretation */}
+      <Card className="p-6 mb-6">
+        <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Reading the Score</h2>
+        <div className="space-y-3">
+          {[
+            { range: "85-100", label: "HOT", color: C.accent, desc: "Exceptional multi-factor momentum. All systems firing — strong performance, closing near highs, technical confirmation. These are the names demanding attention." },
+            { range: "65-84", label: "WARM", color: C.amber, desc: "Solid momentum across most factors. Strong contenders showing meaningful buying pressure, but may lack full technical alignment or have a weaker gap." },
+            { range: "40-64", label: "WATCH", color: C.textMuted, desc: "Moderate activity. Some positive signals but mixed picture. Worth monitoring for potential setup development." },
+            { range: "0-39", label: "COLD", color: C.red, desc: "Weak or negative momentum. Selling pressure or indecision dominates. These names are either consolidating or trending down." },
+          ].map((tier) => (
+            <div key={tier.range} className="flex gap-4 p-3 rounded-lg" style={{ background: C.surface2 }}>
+              <div className="flex-shrink-0 text-center" style={{ minWidth: 60 }}>
+                <p className="text-sm font-extrabold font-mono" style={{ color: tier.color }}>{tier.range}</p>
+                <Badge color={tier.color === C.accent ? "accent" : tier.color === C.amber ? "amber" : tier.color === C.red ? "red" : "gray"} size="xs">{tier.label}</Badge>
+              </div>
+              <p className="text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>{tier.desc}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Additional metrics */}
+      <Card className="p-6 mb-6">
+        <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Supporting Metrics</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { metric: "RSI (Relative Strength Index)", desc: "A momentum oscillator measuring speed and magnitude of price changes on a 0-100 scale. Above 70 suggests overbought conditions; below 30 suggests oversold. We use it as a confirmation signal, not a primary driver." },
+            { metric: "Relative Volume", desc: "Compares current trading activity against normal levels. Volume above 200% indicates heightened interest — institutions may be building or liquidating positions. High volume confirms price moves." },
+            { metric: "Gap Analysis", desc: "The difference between the previous close and today's open. Gaps signal overnight information asymmetry. Gap-and-go patterns (gap up + continuation) are among the strongest momentum setups." },
+            { metric: "Pattern Detection", desc: "Heuristic classification of the day's price action: breakouts, gap-and-go, hammer reversals, consolidation, and more. These are descriptive labels based on candle structure, not predictive signals." },
+          ].map((m) => (
+            <div key={m.metric} className="p-4 rounded-lg" style={{ background: C.surface2 }}>
+              <p className="text-xs font-bold mb-2 font-display" style={{ color: C.text }}>{m.metric}</p>
+              <p className="text-[11px] leading-relaxed font-display" style={{ color: C.textMuted }}>{m.desc}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Data & refresh */}
+      <Card className="p-6 mb-6">
+        <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Data Pipeline</h2>
+        <div className="space-y-3 text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>
+          <p>Our scanner evaluates <span className="font-semibold" style={{ color: C.text }}>30 stocks across 11 sectors</span>, covering the most liquid and high-beta names in the U.S. equity market.</p>
+          <p>Data refreshes automatically every <span className="font-semibold" style={{ color: C.text }}>5 minutes</span> during market hours. Each refresh pulls live quotes and technical indicator aggregates, computes fresh scores, and ranks the top 15 by composite momentum.</p>
+          <p>The universe is designed to capture momentum where it matters most — names with enough liquidity for meaningful participation and enough volatility to generate tradeable moves.</p>
+        </div>
+      </Card>
+
+      {/* Disclaimer */}
+      <Card className="p-6" style={{ border: `1px solid rgba(255,165,2,0.2)` }}>
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 mt-0.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </div>
+          <div className="text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>
+            <p className="font-bold mb-1" style={{ color: C.amber }}>Research Data Only — Not Financial Advice</p>
+            <p>Momentum Compounder provides quantitative market research tools. We are not registered investment advisors. All scores, signals, and data are for informational and educational purposes only. Always conduct your own due diligence and consult a qualified financial professional before making investment decisions. Past performance does not guarantee future results. Trading involves substantial risk of loss.</p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ━━━ MAIN APP EXPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<PageId>("dashboard");
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   const supabase = createClient();
 
@@ -1666,6 +2015,11 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
+      // Check onboarding status from localStorage
+      if (session?.user) {
+        const key = `mc_onboarded_${session.user.id}`;
+        setOnboarded(localStorage.getItem(key) === "true");
+      }
     });
 
     // Listen for auth state changes (login, logout, token refresh)
@@ -1673,6 +2027,12 @@ export default function Home() {
       (_event, session) => {
         setUser(session?.user ?? null);
         setLoading(false);
+        if (session?.user) {
+          const key = `mc_onboarded_${session.user.id}`;
+          setOnboarded(localStorage.getItem(key) === "true");
+        } else {
+          setOnboarded(null);
+        }
       }
     );
 
@@ -1682,7 +2042,26 @@ export default function Home() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setOnboarded(null);
     setPage("dashboard");
+  };
+
+  const handleOnboardingComplete = (profile: { firstName: string; lastName: string; experience: string; goal: string }) => {
+    if (user) {
+      // Save profile to Supabase user metadata
+      supabase.auth.updateUser({
+        data: {
+          first_name: profile.firstName,
+          last_name: profile.lastName,
+          experience_level: profile.experience,
+          trading_goal: profile.goal,
+          onboarded_at: new Date().toISOString(),
+        },
+      });
+      // Mark as onboarded in localStorage for instant check
+      localStorage.setItem(`mc_onboarded_${user.id}`, "true");
+      setOnboarded(true);
+    }
   };
 
   const pages: Record<PageId, ReactNode> = {
@@ -1691,6 +2070,7 @@ export default function Home() {
     trade: <TradeDetailPage />,
     rotation: <RotationPage />,
     journal: <JournalPage />,
+    methodology: <MethodologyPage />,
   };
 
   // Loading state while checking session
@@ -1728,16 +2108,24 @@ export default function Home() {
     return (
       <LoginPage
         onLogin={() => {
-          // Re-check session after login
           supabase.auth.getSession().then(({ data: { session } }) => {
             setUser(session?.user ?? null);
+            if (session?.user) {
+              const key = `mc_onboarded_${session.user.id}`;
+              setOnboarded(localStorage.getItem(key) === "true");
+            }
           });
         }}
       />
     );
   }
 
-  // Authenticated — show app
+  // Authenticated but not onboarded — show onboarding
+  if (onboarded === false) {
+    return <OnboardingPage onComplete={handleOnboardingComplete} />;
+  }
+
+  // Authenticated + onboarded — show app
   return (
     <AppLayout page={page} setPage={setPage} onLogout={handleLogout} userEmail={user.email}>
       {pages[page]}
