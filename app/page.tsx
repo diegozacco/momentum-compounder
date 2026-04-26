@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useCallback,
   useMemo,
   type ReactNode,
   type CSSProperties,
@@ -41,6 +42,28 @@ interface ScannerEntry {
   sector: string;
   pattern: string;
   catalyst: string;
+}
+
+/** Live scanner stock from /api/scanner */
+interface LiveScannerStock {
+  symbol: string;
+  name: string;
+  sector: string;
+  price: number;
+  change: number;
+  changePct: number;
+  dayHigh: number;
+  dayLow: number;
+  open: number;
+  prevClose: number;
+  momentumScore: number;
+  relativeVolume: number;
+  rsi: number;
+  signal: "STRONG BUY" | "BUY" | "NEUTRAL" | "SELL" | "STRONG SELL";
+  pattern: string;
+  dayRangePosition: number;
+  gapPct: number;
+  fetchedAt: string;
 }
 
 interface RotationEntry {
@@ -935,89 +958,292 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
 // ━━━ SCANNER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function ScannerPage() {
+  const [stocks, setStocks] = useState<LiveScannerStock[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(300);
   const [filter, setFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"momentumScore" | "changePct" | "rsi" | "relativeVolume">("momentumScore");
+
+  const fetchScanner = useCallback(async (background = false) => {
+    if (background) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+      setError(null);
+    }
+
+    try {
+      const res = await fetch("/api/scanner", { cache: background ? "default" : "no-cache" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.success || !data.data?.length) throw new Error(data.error || "No data returned");
+      setStocks(data.data);
+      setLastUpdated(data.meta.fetchedAt);
+      setError(null);
+      setCountdown(300);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to fetch";
+      if (stocks.length === 0) setError(msg);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [stocks.length]);
+
+  useEffect(() => {
+    fetchScanner(false);
+    const poll = setInterval(() => fetchScanner(true), 300_000);
+    const tick = setInterval(() => setCountdown((p) => (p <= 1 ? 300 : p - 1)), 1000);
+    return () => { clearInterval(poll); clearInterval(tick); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
-    let list = [...MOCK_SCANNER];
-    if (filter !== "all") list = list.filter((s) => s.sector.toLowerCase() === filter);
-    list.sort((a, b) => b.score - a.score);
+    let list = [...stocks];
+    if (filter !== "all") list = list.filter((s) => s.sector.toLowerCase().includes(filter));
+    list.sort((a, b) => (b[sortBy] ?? 0) - (a[sortBy] ?? 0));
     return list;
-  }, [filter]);
+  }, [stocks, filter, sortBy]);
+
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+
+  const formatCountdown = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+
+  const signalColor = (sig: string): BadgeColor =>
+    sig.includes("STRONG BUY") ? "accent" : sig === "BUY" ? "accent" : sig === "SELL" || sig === "STRONG SELL" ? "red" : "amber";
+
+  const sectors = useMemo(() => {
+    const s = new Set(stocks.map((x) => x.sector));
+    return ["all", ...Array.from(s).map((x) => x.toLowerCase())];
+  }, [stocks]);
+
+  // Loading skeleton
+  if (isLoading) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>Scanner</h1>
+          <p className="text-sm mt-1 font-mono" style={{ color: C.textMuted }}>Loading live momentum data...</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="p-5">
+              <div className="animate-pulse space-y-3">
+                <div className="flex justify-between">
+                  <div>
+                    <div className="h-5 w-16 rounded" style={{ background: C.surface3 }} />
+                    <div className="h-3 w-32 rounded mt-2" style={{ background: C.surface3 }} />
+                  </div>
+                  <div className="h-10 w-12 rounded" style={{ background: C.surface3 }} />
+                </div>
+                <div className="h-1.5 rounded-full" style={{ background: C.surface3 }} />
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((j) => (
+                    <div key={j}>
+                      <div className="h-2 w-8 rounded mb-1" style={{ background: C.surface3 }} />
+                      <div className="h-4 w-12 rounded" style={{ background: C.surface3 }} />
+                    </div>
+                  ))}
+                </div>
+                <div className="h-12 rounded-lg" style={{ background: C.surface3 }} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>Scanner</h1>
+        </div>
+        <Card className="p-8 text-center">
+          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: C.redDim }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-bold mb-2 font-display" style={{ color: C.text }}>Scanner Offline</h3>
+          <p className="text-sm mb-6 max-w-md mx-auto font-mono" style={{ color: C.textMuted }}>{error}</p>
+          <button onClick={() => fetchScanner(false)}
+            className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider font-mono"
+            style={{ background: C.accentDim, color: C.accent, border: `1px solid rgba(0,212,170,0.2)` }}>
+            Retry Scan
+          </button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>Scanner</h1>
-          <p className="text-sm mt-1 font-mono" style={{ color: C.textMuted }}>Momentum breakout candidates</p>
+          <p className="text-sm mt-1 font-mono" style={{ color: C.textMuted }}>Live momentum breakout candidates</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {["all", "tech", "utility", "energy", "industrial", "finance"].map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all font-mono"
+        <div className="flex items-center gap-3">
+          {stocks.length > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <div className="w-2 h-2 rounded-full" style={{ background: C.accent }} />
+                <div className="absolute inset-0 w-2 h-2 rounded-full animate-ping" style={{ background: C.accent, opacity: 0.4 }} />
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider font-mono" style={{ color: C.accent }}>LIVE</span>
+            </div>
+          )}
+          <span className="text-[10px] font-mono px-2 py-1 rounded" style={{ background: C.surface2, color: C.textDim }}>
+            ↻ {formatCountdown(countdown)}
+          </span>
+          <button onClick={() => fetchScanner(false)} disabled={isRefreshing}
+            className="px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all font-mono"
+            style={{ background: C.surface2, color: isRefreshing ? C.accent : C.textMuted, border: `1px solid ${C.border}` }}>
+            {isRefreshing ? (
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                Scanning...
+              </span>
+            ) : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {/* Status bar */}
+      {lastUpdated && (
+        <div className="flex flex-wrap items-center gap-3 mb-4 px-3 py-2 rounded-lg" style={{ background: C.surface2 }}>
+          <span className="text-[10px] font-mono" style={{ color: C.textDim }}>{stocks.length} stocks ranked</span>
+          <span className="text-[10px]" style={{ color: C.textDim }}>•</span>
+          <span className="text-[10px] font-mono" style={{ color: C.textDim }}>Updated {formatTime(lastUpdated)}</span>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {sectors.map((f) => (
+            <button key={f} onClick={() => setFilter(f)}
+              className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-all font-mono"
               style={{
                 background: filter === f ? C.accentDim : C.surface2,
                 color: filter === f ? C.accent : C.textMuted,
                 border: `1px solid ${filter === f ? "rgba(0,212,170,0.3)" : C.border}`,
-              }}
-            >
+              }}>
               {f}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 sm:ml-auto">
+          <span className="text-[9px] uppercase tracking-widest font-mono" style={{ color: C.textDim }}>Sort:</span>
+          {([["momentumScore", "Score"], ["changePct", "Change"], ["rsi", "RSI"], ["relativeVolume", "Vol"]] as const).map(([val, label]) => (
+            <button key={val} onClick={() => setSortBy(val)}
+              className="px-2 py-1 rounded text-[10px] font-semibold uppercase font-mono"
+              style={{ background: sortBy === val ? C.accentDim : "transparent", color: sortBy === val ? C.accent : C.textDim }}>
+              {label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filtered.map((stock) => (
-          <Card key={stock.sym} hover className="p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold font-mono" style={{ color: C.text }}>{stock.sym}</span>
-                  <Badge color={stock.score >= 90 ? "accent" : stock.score >= 80 ? "amber" : "gray"} size="xs">
-                    {stock.score >= 90 ? "🔥 HOT" : stock.score >= 80 ? "WARM" : "WATCH"}
-                  </Badge>
+      {/* Stock cards */}
+      {filtered.length === 0 ? (
+        <Card className="p-8 text-center">
+          <p className="text-sm font-mono" style={{ color: C.textMuted }}>No stocks match the current filter.</p>
+          <button onClick={() => setFilter("all")} className="mt-3 text-xs font-semibold font-mono" style={{ color: C.accent }}>Clear filter →</button>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map((stock, i) => {
+            const scoreLabel = stock.momentumScore >= 85 ? "🔥 HOT" : stock.momentumScore >= 65 ? "WARM" : "WATCH";
+            const scoreBadge: BadgeColor = stock.momentumScore >= 85 ? "accent" : stock.momentumScore >= 65 ? "amber" : "gray";
+            const isPos = stock.changePct >= 0;
+
+            return (
+              <Card key={stock.symbol} hover className="p-5">
+                {/* Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold w-5 h-5 rounded flex items-center justify-center font-mono"
+                        style={{ background: i < 3 ? C.accentDim : C.surface3, color: i < 3 ? C.accent : C.textDim }}>
+                        {i + 1}
+                      </span>
+                      <span className="text-lg font-bold font-mono" style={{ color: C.text }}>{stock.symbol}</span>
+                      <Badge color={scoreBadge} size="xs">{scoreLabel}</Badge>
+                    </div>
+                    <p className="text-xs mt-0.5 font-mono" style={{ color: C.textDim }}>{stock.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-extrabold font-mono" style={{ color: C.accent }}>{stock.momentumScore}</div>
+                    <p className="text-[9px] uppercase tracking-widest font-mono" style={{ color: C.textDim }}>SCORE</p>
+                  </div>
                 </div>
-                <p className="text-xs mt-0.5 font-mono" style={{ color: C.textDim }}>{stock.name}</p>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-extrabold font-mono" style={{ color: C.accent }}>{stock.score}</div>
-                <p className="text-[9px] uppercase tracking-widest font-mono" style={{ color: C.textDim }}>SCORE</p>
-              </div>
-            </div>
 
-            <MomentumBar value={stock.momentum} height={4} />
+                {/* Momentum bar */}
+                <MomentumBar value={stock.momentumScore} height={4} />
 
-            <div className="grid grid-cols-3 gap-3 mt-4">
-              {[
-                { label: "RSI", value: String(stock.rsi), color: stock.rsi > 70 ? C.amber : C.text },
-                { label: "Rel.Vol", value: stock.vol, color: C.accent },
-                { label: "Pattern", value: stock.pattern, color: C.text, isText: true },
-              ].map((m) => (
-                <div key={m.label}>
-                  <p className="text-[9px] uppercase tracking-widest mb-0.5 font-mono" style={{ color: C.textDim }}>{m.label}</p>
-                  {m.isText ? (
-                    <p className="text-sm font-semibold truncate font-display" style={{ color: m.color }}>{m.value}</p>
-                  ) : (
-                    <p className="text-sm font-bold font-mono" style={{ color: m.color }}>{m.value}</p>
-                  )}
+                {/* Price & change */}
+                <div className="flex items-baseline justify-between mt-3 mb-3">
+                  <span className="text-base font-bold font-mono" style={{ color: C.text }}>${stock.price.toFixed(2)}</span>
+                  <span className="text-sm font-semibold font-mono" style={{ color: isPos ? C.accent : C.red }}>
+                    {isPos ? "+" : ""}{stock.changePct.toFixed(2)}%
+                    <span className="text-xs ml-1">({isPos ? "+" : ""}{stock.change.toFixed(2)})</span>
+                  </span>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-3 p-2.5 rounded-lg" style={{ background: C.surface2 }}>
-              <p className="text-[10px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Catalyst</p>
-              <p className="text-xs font-display" style={{ color: C.textMuted }}>{stock.catalyst}</p>
-            </div>
+                {/* Metrics grid */}
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest mb-0.5 font-mono" style={{ color: C.textDim }}>RSI</p>
+                    <p className="text-sm font-bold font-mono" style={{ color: stock.rsi > 70 ? C.amber : stock.rsi < 30 ? C.red : C.text }}>{stock.rsi}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest mb-0.5 font-mono" style={{ color: C.textDim }}>Rel.Vol</p>
+                    <p className="text-sm font-bold font-mono" style={{ color: stock.relativeVolume > 200 ? C.accent : C.text }}>{stock.relativeVolume}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest mb-0.5 font-mono" style={{ color: C.textDim }}>Gap</p>
+                    <p className="text-sm font-bold font-mono" style={{ color: stock.gapPct > 0 ? C.accent : C.red }}>{stock.gapPct > 0 ? "+" : ""}{stock.gapPct.toFixed(1)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest mb-0.5 font-mono" style={{ color: C.textDim }}>Signal</p>
+                    <Badge color={signalColor(stock.signal)} size="xs">{stock.signal}</Badge>
+                  </div>
+                </div>
 
-            <div className="mt-2">
-              <MiniChart data={sparkData()} color={stock.score >= 90 ? C.accent : C.amber} width={280} height={30} />
-            </div>
-          </Card>
-        ))}
-      </div>
+                {/* Pattern & day range */}
+                <div className="mt-3 p-2.5 rounded-lg" style={{ background: C.surface2 }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] uppercase tracking-widest font-mono" style={{ color: C.textDim }}>Pattern</p>
+                    <p className="text-xs font-semibold font-display" style={{ color: C.text }}>{stock.pattern}</p>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[9px] font-mono" style={{ color: C.textDim }}>L {stock.dayLow.toFixed(2)}</span>
+                    <div className="flex-1 relative h-1.5 rounded-full" style={{ background: C.surface3 }}>
+                      <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                        style={{ left: `${stock.dayRangePosition}%`, background: C.accent, boxShadow: `0 0 6px ${C.accentGlow}` }} />
+                    </div>
+                    <span className="text-[9px] font-mono" style={{ color: C.textDim }}>H {stock.dayHigh.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Sector + timestamp */}
+                <div className="mt-3 flex items-center justify-between">
+                  <Badge color="gray" size="xs">{stock.sector}</Badge>
+                  <span className="text-[9px] font-mono" style={{ color: C.textDim }}>{formatTime(stock.fetchedAt)}</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
