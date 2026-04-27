@@ -12,139 +12,205 @@ import type {
 } from "../types/scanner";
 
 // ── Scan Universe ────────────────────────────────────────
-// 30 liquid, high-beta names across sectors.
-// Intentionally larger than the 15 we return — we scan wide
-// and filter to the strongest movers.
+// 120 liquid, high-beta names across 11 GICS sectors.
+// Curated for momentum trading: high liquidity, institutional
+// participation, and enough volatility for tradeable moves.
+// Scans wide, returns top 30 ranked by composite score.
 
 export const SCAN_UNIVERSE: UniverseEntry[] = [
-  // Technology
+  // ── Technology (30) ────────────────────────────────────
   { symbol: "NVDA", name: "NVIDIA Corp", sector: "Technology" },
   { symbol: "AVGO", name: "Broadcom Inc", sector: "Technology" },
   { symbol: "META", name: "Meta Platforms", sector: "Technology" },
+  { symbol: "AAPL", name: "Apple Inc", sector: "Technology" },
+  { symbol: "MSFT", name: "Microsoft Corp", sector: "Technology" },
+  { symbol: "AMD", name: "Advanced Micro Devices", sector: "Technology" },
   { symbol: "SMCI", name: "Super Micro Computer", sector: "Technology" },
   { symbol: "CRDO", name: "Credo Technology", sector: "Technology" },
   { symbol: "ANET", name: "Arista Networks", sector: "Technology" },
   { symbol: "PLTR", name: "Palantir Technologies", sector: "Technology" },
   { symbol: "APP", name: "AppLovin Corp", sector: "Technology" },
   { symbol: "PANW", name: "Palo Alto Networks", sector: "Technology" },
-  { symbol: "AMD", name: "Advanced Micro Devices", sector: "Technology" },
   { symbol: "ORCL", name: "Oracle Corp", sector: "Technology" },
-  // Energy
+  { symbol: "CRM", name: "Salesforce Inc", sector: "Technology" },
+  { symbol: "NOW", name: "ServiceNow Inc", sector: "Technology" },
+  { symbol: "SNPS", name: "Synopsys Inc", sector: "Technology" },
+  { symbol: "CDNS", name: "Cadence Design", sector: "Technology" },
+  { symbol: "MRVL", name: "Marvell Technology", sector: "Technology" },
+  { symbol: "MU", name: "Micron Technology", sector: "Technology" },
+  { symbol: "INTC", name: "Intel Corp", sector: "Technology" },
+  { symbol: "ADBE", name: "Adobe Inc", sector: "Technology" },
+  { symbol: "SHOP", name: "Shopify Inc", sector: "Technology" },
+  { symbol: "CRWD", name: "CrowdStrike Holdings", sector: "Technology" },
+  { symbol: "FTNT", name: "Fortinet Inc", sector: "Technology" },
+  { symbol: "DDOG", name: "Datadog Inc", sector: "Technology" },
+  { symbol: "NET", name: "Cloudflare Inc", sector: "Technology" },
+  { symbol: "SNOW", name: "Snowflake Inc", sector: "Technology" },
+  { symbol: "HUBS", name: "HubSpot Inc", sector: "Technology" },
+  { symbol: "TEAM", name: "Atlassian Corp", sector: "Technology" },
+  { symbol: "ZS", name: "Zscaler Inc", sector: "Technology" },
+
+  // ── Energy (10) ────────────────────────────────────────
+  { symbol: "XOM", name: "Exxon Mobil", sector: "Energy" },
+  { symbol: "CVX", name: "Chevron Corp", sector: "Energy" },
   { symbol: "TRGP", name: "Targa Resources", sector: "Energy" },
   { symbol: "OKE", name: "ONEOK Inc", sector: "Energy" },
-  { symbol: "XOM", name: "Exxon Mobil", sector: "Energy" },
-  // Industrials
+  { symbol: "WMB", name: "Williams Companies", sector: "Energy" },
+  { symbol: "SLB", name: "Schlumberger Ltd", sector: "Energy" },
+  { symbol: "EOG", name: "EOG Resources", sector: "Energy" },
+  { symbol: "PXD", name: "Pioneer Natural Resources", sector: "Energy" },
+  { symbol: "MPC", name: "Marathon Petroleum", sector: "Energy" },
+  { symbol: "VLO", name: "Valero Energy", sector: "Energy" },
+
+  // ── Industrials (12) ───────────────────────────────────
   { symbol: "GE", name: "GE Aerospace", sector: "Industrials" },
   { symbol: "TT", name: "Trane Technologies", sector: "Industrials" },
   { symbol: "URI", name: "United Rentals", sector: "Industrials" },
-  // Utilities
+  { symbol: "CAT", name: "Caterpillar Inc", sector: "Industrials" },
+  { symbol: "DE", name: "Deere & Company", sector: "Industrials" },
+  { symbol: "ETN", name: "Eaton Corp", sector: "Industrials" },
+  { symbol: "ITW", name: "Illinois Tool Works", sector: "Industrials" },
+  { symbol: "EMR", name: "Emerson Electric", sector: "Industrials" },
+  { symbol: "UBER", name: "Uber Technologies", sector: "Industrials" },
+  { symbol: "FI", name: "Fiserv Inc", sector: "Industrials" },
+  { symbol: "AXON", name: "Axon Enterprise", sector: "Industrials" },
+  { symbol: "PWR", name: "Quanta Services", sector: "Industrials" },
+
+  // ── Utilities (8) ──────────────────────────────────────
   { symbol: "VST", name: "Vistra Corp", sector: "Utilities" },
   { symbol: "CEG", name: "Constellation Energy", sector: "Utilities" },
-  // Healthcare
+  { symbol: "NRG", name: "NRG Energy", sector: "Utilities" },
+  { symbol: "NEE", name: "NextEra Energy", sector: "Utilities" },
+  { symbol: "SO", name: "Southern Company", sector: "Utilities" },
+  { symbol: "DUK", name: "Duke Energy", sector: "Utilities" },
+  { symbol: "AES", name: "AES Corp", sector: "Utilities" },
+  { symbol: "EXC", name: "Exelon Corp", sector: "Utilities" },
+
+  // ── Healthcare (12) ────────────────────────────────────
   { symbol: "LLY", name: "Eli Lilly", sector: "Healthcare" },
   { symbol: "UNH", name: "UnitedHealth Group", sector: "Healthcare" },
-  // Financials
+  { symbol: "JNJ", name: "Johnson & Johnson", sector: "Healthcare" },
+  { symbol: "ABBV", name: "AbbVie Inc", sector: "Healthcare" },
+  { symbol: "MRK", name: "Merck & Co", sector: "Healthcare" },
+  { symbol: "TMO", name: "Thermo Fisher Scientific", sector: "Healthcare" },
+  { symbol: "ISRG", name: "Intuitive Surgical", sector: "Healthcare" },
+  { symbol: "VRTX", name: "Vertex Pharmaceuticals", sector: "Healthcare" },
+  { symbol: "BSX", name: "Boston Scientific", sector: "Healthcare" },
+  { symbol: "SYK", name: "Stryker Corp", sector: "Healthcare" },
+  { symbol: "REGN", name: "Regeneron Pharmaceuticals", sector: "Healthcare" },
+  { symbol: "HCA", name: "HCA Healthcare", sector: "Healthcare" },
+
+  // ── Financials (12) ────────────────────────────────────
   { symbol: "FICO", name: "Fair Isaac Corp", sector: "Financials" },
   { symbol: "GS", name: "Goldman Sachs", sector: "Financials" },
-  // Consumer Discretionary
+  { symbol: "JPM", name: "JPMorgan Chase", sector: "Financials" },
+  { symbol: "V", name: "Visa Inc", sector: "Financials" },
+  { symbol: "MA", name: "Mastercard Inc", sector: "Financials" },
+  { symbol: "MS", name: "Morgan Stanley", sector: "Financials" },
+  { symbol: "BLK", name: "BlackRock Inc", sector: "Financials" },
+  { symbol: "SPGI", name: "S&P Global", sector: "Financials" },
+  { symbol: "ICE", name: "Intercontinental Exchange", sector: "Financials" },
+  { symbol: "CME", name: "CME Group", sector: "Financials" },
+  { symbol: "COIN", name: "Coinbase Global", sector: "Financials" },
+  { symbol: "HOOD", name: "Robinhood Markets", sector: "Financials" },
+
+  // ── Consumer Discretionary (12) ────────────────────────
   { symbol: "TSLA", name: "Tesla Inc", sector: "Consumer Discretionary" },
+  { symbol: "AMZN", name: "Amazon.com Inc", sector: "Consumer Discretionary" },
   { symbol: "BKNG", name: "Booking Holdings", sector: "Consumer Discretionary" },
-  // Communication Services
+  { symbol: "HD", name: "Home Depot", sector: "Consumer Discretionary" },
+  { symbol: "LOW", name: "Lowe's Companies", sector: "Consumer Discretionary" },
+  { symbol: "NKE", name: "Nike Inc", sector: "Consumer Discretionary" },
+  { symbol: "SBUX", name: "Starbucks Corp", sector: "Consumer Discretionary" },
+  { symbol: "TJX", name: "TJX Companies", sector: "Consumer Discretionary" },
+  { symbol: "CMG", name: "Chipotle Mexican Grill", sector: "Consumer Discretionary" },
+  { symbol: "ORLY", name: "O'Reilly Automotive", sector: "Consumer Discretionary" },
+  { symbol: "DECK", name: "Deckers Outdoor", sector: "Consumer Discretionary" },
+  { symbol: "RCL", name: "Royal Caribbean", sector: "Consumer Discretionary" },
+
+  // ── Communication Services (8) ─────────────────────────
   { symbol: "GOOG", name: "Alphabet Inc", sector: "Communication Services" },
   { symbol: "NFLX", name: "Netflix Inc", sector: "Communication Services" },
-  // Materials
+  { symbol: "DIS", name: "Walt Disney Co", sector: "Communication Services" },
+  { symbol: "SPOT", name: "Spotify Technology", sector: "Communication Services" },
+  { symbol: "TTWO", name: "Take-Two Interactive", sector: "Communication Services" },
+  { symbol: "EA", name: "Electronic Arts", sector: "Communication Services" },
+  { symbol: "RBLX", name: "Roblox Corp", sector: "Communication Services" },
+  { symbol: "ROKU", name: "Roku Inc", sector: "Communication Services" },
+
+  // ── Materials (8) ──────────────────────────────────────
   { symbol: "FCX", name: "Freeport-McMoRan", sector: "Materials" },
-  // Real Estate
+  { symbol: "NEM", name: "Newmont Corp", sector: "Materials" },
+  { symbol: "NUE", name: "Nucor Corp", sector: "Materials" },
+  { symbol: "STLD", name: "Steel Dynamics", sector: "Materials" },
+  { symbol: "APD", name: "Air Products", sector: "Materials" },
+  { symbol: "LIN", name: "Linde PLC", sector: "Materials" },
+  { symbol: "SHW", name: "Sherwin-Williams", sector: "Materials" },
+  { symbol: "VMC", name: "Vulcan Materials", sector: "Materials" },
+
+  // ── Real Estate (4) ────────────────────────────────────
   { symbol: "EQIX", name: "Equinix Inc", sector: "Real Estate" },
-  // Consumer Staples
+  { symbol: "AMT", name: "American Tower", sector: "Real Estate" },
+  { symbol: "PLD", name: "Prologis Inc", sector: "Real Estate" },
+  { symbol: "DLR", name: "Digital Realty", sector: "Real Estate" },
+
+  // ── Consumer Staples (4) ───────────────────────────────
   { symbol: "COST", name: "Costco Wholesale", sector: "Consumer Staples" },
+  { symbol: "WMT", name: "Walmart Inc", sector: "Consumer Staples" },
+  { symbol: "PG", name: "Procter & Gamble", sector: "Consumer Staples" },
+  { symbol: "KO", name: "Coca-Cola Co", sector: "Consumer Staples" },
 ];
 
 // ── Momentum Scoring ─────────────────────────────────────
 
-/**
- * Compute composite momentum score (0-100) from quote data.
- *
- * Scoring breakdown:
- *   - Day performance (change %)          → 0-30 pts
- *   - Day range position (close vs H/L)   → 0-20 pts
- *   - Gap strength (open vs prev close)   → 0-15 pts
- *   - Intraday trend (close vs open)      → 0-15 pts
- *   - Technical signal alignment          → 0-20 pts
- */
 function computeMomentumScore(
   quote: FinnhubQuote,
   technical: FinnhubTechnicalIndicator | null
 ): number {
   let score = 0;
 
-  // 1. Day performance (0-30)
-  // +3% or more = full points, scales linearly
   const changePct = quote.dp ?? 0;
   const perfScore = Math.min(30, Math.max(0, (changePct / 3) * 30));
   score += perfScore;
 
-  // 2. Day range position (0-20)
-  // Closing near the high = bullish
   const range = quote.h - quote.l;
   if (range > 0) {
     const rangePosition = (quote.c - quote.l) / range;
     score += rangePosition * 20;
   }
 
-  // 3. Gap strength (0-15)
-  // Gap up from previous close = momentum
   if (quote.pc > 0) {
     const gapPct = ((quote.o - quote.pc) / quote.pc) * 100;
     const gapScore = Math.min(15, Math.max(0, (gapPct / 2) * 15));
     score += gapScore;
   }
 
-  // 4. Intraday trend (0-15)
-  // Price moving up from open to current = strong
   if (quote.o > 0) {
     const intradayPct = ((quote.c - quote.o) / quote.o) * 100;
     const intradayScore = Math.min(15, Math.max(0, (intradayPct / 1.5) * 15));
     score += intradayScore;
   }
 
-  // 5. Technical signal alignment (0-20)
   if (technical?.technicalAnalysis?.signal) {
     const signal = technical.technicalAnalysis.signal.toLowerCase();
     if (signal === "strong_buy") score += 20;
     else if (signal === "buy") score += 15;
     else if (signal === "neutral") score += 8;
     else if (signal === "sell") score += 3;
-    // strong_sell = 0
   }
 
   return Math.round(Math.min(100, Math.max(0, score)));
 }
 
-/**
- * Estimate RSI from daily price action.
- * This is an approximation — for true RSI you need 14 days of candles.
- * We use the day's movement relative to range as a proxy.
- */
 function estimateRsi(quote: FinnhubQuote): number {
   const changePct = quote.dp ?? 0;
   const range = quote.h - quote.l;
   const rangePosition = range > 0 ? (quote.c - quote.l) / range : 0.5;
-
-  // Map: strong up day with close near high → RSI ~75
-  //       flat day → RSI ~50
-  //       strong down day with close near low → RSI ~25
   const base = 50 + changePct * 5;
   const adjusted = base * 0.6 + rangePosition * 40;
-
   return Math.round(Math.min(95, Math.max(5, adjusted)));
 }
 
-/**
- * Detect chart pattern heuristic from single-day price action.
- * Production note: Real pattern detection requires multi-day candles.
- * This provides a best-effort classification from available data.
- */
 function detectPattern(quote: FinnhubQuote): string {
   const changePct = quote.dp ?? 0;
   const range = quote.h - quote.l;
@@ -153,91 +219,37 @@ function detectPattern(quote: FinnhubQuote): string {
   const bodyRatio = range > 0 ? body / range : 0;
   const gapPct = quote.pc > 0 ? ((quote.o - quote.pc) / quote.pc) * 100 : 0;
 
-  // Gap up with continuation
-  if (gapPct > 1 && changePct > 1 && rangePosition > 0.7) {
-    return "Gap & Go";
-  }
-
-  // Strong bullish candle
-  if (changePct > 2 && rangePosition > 0.8 && bodyRatio > 0.6) {
-    return "Breakout";
-  }
-
-  // Hammer / reversal
-  if (rangePosition > 0.75 && bodyRatio < 0.3 && changePct > 0) {
-    return "Hammer Reversal";
-  }
-
-  // Narrow range breakout
-  if (bodyRatio > 0.7 && changePct > 0.5 && changePct < 2) {
-    return "Range Expansion";
-  }
-
-  // Doji / indecision
-  if (bodyRatio < 0.15 && range > 0) {
-    return "Doji (Indecision)";
-  }
-
-  // Close near high with moderate move
-  if (rangePosition > 0.85 && changePct > 0) {
-    return "Closing Strong";
-  }
-
-  // Bearish patterns
-  if (changePct < -2 && rangePosition < 0.2) {
-    return "Breakdown";
-  }
-
-  if (changePct < -1 && rangePosition < 0.3) {
-    return "Selling Pressure";
-  }
-
-  // Consolidation
-  if (Math.abs(changePct) < 0.5) {
-    return "Consolidation";
-  }
-
-  // Default
+  if (gapPct > 1 && changePct > 1 && rangePosition > 0.7) return "Gap & Go";
+  if (changePct > 2 && rangePosition > 0.8 && bodyRatio > 0.6) return "Breakout";
+  if (rangePosition > 0.75 && bodyRatio < 0.3 && changePct > 0) return "Hammer Reversal";
+  if (bodyRatio > 0.7 && changePct > 0.5 && changePct < 2) return "Range Expansion";
+  if (bodyRatio < 0.15 && range > 0) return "Doji (Indecision)";
+  if (rangePosition > 0.85 && changePct > 0) return "Closing Strong";
+  if (changePct < -2 && rangePosition < 0.2) return "Breakdown";
+  if (changePct < -1 && rangePosition < 0.3) return "Selling Pressure";
+  if (Math.abs(changePct) < 0.5) return "Consolidation";
   if (changePct > 0) return "Higher Low";
   return "Pulling Back";
 }
 
-/**
- * Map Finnhub technical signal string to our display format.
- */
 function mapSignal(
   technical: FinnhubTechnicalIndicator | null
 ): ScannerStock["signal"] {
   if (!technical?.technicalAnalysis?.signal) return "NEUTRAL";
-
   const raw = technical.technicalAnalysis.signal.toLowerCase();
   switch (raw) {
-    case "strong_buy":
-      return "STRONG BUY";
-    case "buy":
-      return "BUY";
-    case "sell":
-      return "SELL";
-    case "strong_sell":
-      return "STRONG SELL";
-    default:
-      return "NEUTRAL";
+    case "strong_buy": return "STRONG BUY";
+    case "buy": return "BUY";
+    case "sell": return "SELL";
+    case "strong_sell": return "STRONG SELL";
+    default: return "NEUTRAL";
   }
 }
 
-/**
- * Estimate relative volume from price action.
- * Without actual volume data, we use the day's range relative
- * to the close as a volatility proxy.
- */
 function estimateRelativeVolume(quote: FinnhubQuote): number {
   const range = quote.h - quote.l;
   if (quote.c <= 0 || range <= 0) return 100;
-
-  // Range as % of price — typical stock has ~1-2% daily range
   const rangePct = (range / quote.c) * 100;
-
-  // Map: 1% range = ~100% (normal), 3% = ~200%, 5% = ~350%
   return Math.round(Math.min(500, Math.max(50, rangePct * 80)));
 }
 
@@ -248,13 +260,6 @@ export interface ScanResult {
   errors: string[];
 }
 
-/**
- * Run the full scanner pipeline:
- * 1. Fetch quotes for entire universe
- * 2. Fetch technical indicators
- * 3. Score & rank
- * 4. Return top 15
- */
 export function processQuotes(
   quotes: Map<string, FinnhubQuote>,
   technicals: Map<string, FinnhubTechnicalIndicator>,
@@ -299,9 +304,9 @@ export function processQuotes(
     });
   }
 
-  // Sort by momentum score descending, take top 15
+  // Sort by momentum score descending, return top 30
   stocks.sort((a, b) => b.momentumScore - a.momentumScore);
-  const topStocks = stocks.slice(0, 15);
+  const topStocks = stocks.slice(0, 30);
 
   return { stocks: topStocks, errors };
 }
