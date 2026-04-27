@@ -2460,7 +2460,7 @@ function MethodologyPage() {
             Momentum Compounder is built on a core principle: <span className="font-semibold" style={{ color: C.text }}>stocks in motion tend to stay in motion.</span> Academic research consistently demonstrates that securities exhibiting strong recent performance tend to continue outperforming over short-to-intermediate horizons.
           </p>
           <p>
-            Our scanner continuously evaluates a curated universe of 120 liquid, high-beta stocks across 11 sectors. Each stock receives a <span className="font-semibold" style={{ color: C.accent }}>composite Momentum Score from 0-100</span> based on five quantitative factors analyzed in real-time from market data.
+            Our scanner continuously evaluates a curated universe of 90 liquid, high-beta stocks across 11 sectors. Each stock receives a <span className="font-semibold" style={{ color: C.accent }}>composite Momentum Score from 0-100</span> based on five quantitative factors analyzed in real-time from market data.
           </p>
           <p>
             The system is designed to surface the strongest movers — stocks demonstrating the most conviction from buyers right now — ranked by relative strength so you can focus your research where it matters most.
@@ -2546,7 +2546,7 @@ function MethodologyPage() {
       <Card className="p-6 mb-6">
         <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Data Pipeline</h2>
         <div className="space-y-3 text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>
-          <p>Our scanner evaluates <span className="font-semibold" style={{ color: C.text }}>120 stocks across 11 sectors</span>, covering the most liquid and high-beta names in the U.S. equity market — from mega-cap leaders like AAPL, MSFT, and AMZN to high-momentum mid-caps like CRDO, AXON, and DECK.</p>
+          <p>Our scanner evaluates <span className="font-semibold" style={{ color: C.text }}>90 stocks across 11 sectors</span>, covering the most liquid and high-beta names in the U.S. equity market — from mega-cap leaders like AAPL, MSFT, and AMZN to high-momentum mid-caps like CRDO, AXON, and DECK.</p>
           <p>Data refreshes automatically every <span className="font-semibold" style={{ color: C.text }}>5 minutes</span> during market hours. Each refresh pulls live quotes and technical indicator aggregates, computes fresh scores, and ranks the top 30 by composite momentum.</p>
           <p>The universe is designed to capture momentum where it matters most — names with enough liquidity for meaningful participation and enough volatility to generate tradeable moves.</p>
         </div>
