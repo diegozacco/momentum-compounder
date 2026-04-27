@@ -802,163 +802,382 @@ function AppLayout({
 // ━━━ DASHBOARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
-  const p = MOCK_PORTFOLIO;
-  const stats = [
-    { label: "Portfolio Value", value: `$${fmtK(p.totalValue)}`, sub: null, color: undefined },
-    { label: "Daily P&L", value: `+$${fmtK(p.dailyPnl)}`, sub: `+${p.dailyPnlPct}%`, color: C.accent },
-    { label: "Win Rate", value: `${p.winRate}%`, sub: `${p.streak} streak`, color: C.accent },
-    { label: "Sharpe Ratio", value: p.sharpe.toFixed(2), sub: `DD: ${p.maxDrawdown}%`, color: C.amber },
-  ];
+  const [entries, setEntries] = useState<DbJournalEntry[]>([]);
+  const [startingCapital, setStartingCapital] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("starting_capital")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.starting_capital) setStartingCapital(Number(profile.starting_capital));
+
+      const { data } = await supabase
+        .from("journal_entries")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("trade_date", { ascending: true });
+
+      if (data) setEntries(data as DbJournalEntry[]);
+      setIsLoading(false);
+    };
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Computed stats
+  const closedEntries = entries.filter((e) => e.pnl !== null);
+  const openEntries = entries.filter((e) => e.exit_price === null);
+  const totalPnl = closedEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const portfolioValue = startingCapital > 0 ? startingCapital + totalPnl : totalPnl;
+  const winners = closedEntries.filter((e) => (e.pnl ?? 0) > 0);
+  const losers = closedEntries.filter((e) => (e.pnl ?? 0) < 0);
+  const winRate = closedEntries.length > 0 ? (winners.length / closedEntries.length) * 100 : 0;
+
+  // Daily P&L
+  const today = new Date().toISOString().split("T")[0];
+  const todayEntries = closedEntries.filter((e) => e.trade_date === today);
+  const dailyPnl = todayEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const dailyPnlPct = startingCapital > 0 ? (dailyPnl / startingCapital) * 100 : 0;
+
+  // Profit factor
+  const grossWins = winners.reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const grossLoss = Math.abs(losers.reduce((a, e) => a + (e.pnl ?? 0), 0));
+  const profitFactor = grossLoss > 0 ? grossWins / grossLoss : grossWins > 0 ? Infinity : 0;
+
+  // Win streak
+  const streak = (() => {
+    let s = 0;
+    for (let i = closedEntries.length - 1; i >= 0; i--) {
+      if ((closedEntries[i].pnl ?? 0) > 0) s++;
+      else break;
+    }
+    return s;
+  })();
+
+  // Equity curve data points (cumulative P&L over time)
+  const equityCurve = useMemo(() => {
+    if (closedEntries.length === 0) return [];
+    let cumulative = startingCapital;
+    return closedEntries.map((e) => {
+      cumulative += e.pnl ?? 0;
+      return { date: e.trade_date, value: cumulative };
+    });
+  }, [closedEntries, startingCapital]);
+
+  // Grade breakdown
+  const gradeBreakdown = useMemo(() => {
+    const grades: Record<string, { count: number; pnl: number }> = {};
+    closedEntries.forEach((e) => {
+      const g = e.grade || "Ungraded";
+      if (!grades[g]) grades[g] = { count: 0, pnl: 0 };
+      grades[g].count++;
+      grades[g].pnl += e.pnl ?? 0;
+    });
+    return Object.entries(grades)
+      .map(([grade, data]) => ({ grade, ...data }))
+      .sort((a, b) => b.count - a.count);
+  }, [closedEntries]);
+
+  const gradeBarColor = (g: string): string => {
+    if (g.startsWith("A")) return C.accent;
+    if (g === "B") return C.blue;
+    if (g === "C") return C.amber;
+    if (g === "D" || g === "F") return C.red;
+    return C.textDim;
+  };
+
+  if (isLoading) {
+    return (
+      <div>
+        <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display mb-8" style={{ color: C.text }}>Dashboard</h1>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="p-4 lg:p-5">
+              <div className="animate-pulse">
+                <div className="h-3 w-20 rounded mb-3" style={{ background: C.surface3 }} />
+                <div className="h-7 w-24 rounded" style={{ background: C.surface3 }} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const hasData = entries.length > 0;
+  const hasClosedTrades = closedEntries.length > 0;
 
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>
-            Dashboard
-          </h1>
+          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>Dashboard</h1>
           <p className="text-sm mt-1 font-mono" style={{ color: C.textMuted }}>
             {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge color="accent">LIVE</Badge>
-          <Badge color="gray">US MARKET OPEN</Badge>
+          {hasData && <Badge color="accent">{entries.length} TRADES</Badge>}
+          {openEntries.length > 0 && <Badge color="amber">{openEntries.length} OPEN</Badge>}
         </div>
       </div>
 
+      {/* Welcome state for new users */}
+      {!hasData && startingCapital === 0 && (
+        <Card className="p-8 mb-6 text-center" style={{ border: `1px solid rgba(0,212,170,0.15)` }}>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl mb-4" style={{ background: C.accentDim }}>
+            <Icon name="journal" size={28} color={C.accent} />
+          </div>
+          <h2 className="text-lg font-extrabold font-display mb-2" style={{ color: C.text }}>Welcome to Your Dashboard</h2>
+          <p className="text-sm font-display mb-6 max-w-md mx-auto" style={{ color: C.textMuted }}>
+            Your performance stats will appear here as you log trades. Start by setting your capital and making your first journal entry.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => setPage("journal")}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider font-mono"
+              style={{ background: `linear-gradient(135deg, ${C.accent}, #00b894)`, color: "#000", boxShadow: `0 4px 15px ${C.accentGlow}` }}>
+              Open Journal
+            </button>
+            <button onClick={() => setPage("scanner")}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider font-mono"
+              style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>
+              Explore Scanner
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6">
-        {stats.map((s, i) => (
-          <Card key={i} className="p-4 lg:p-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 font-mono" style={{ color: C.textDim }}>{s.label}</p>
-            <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: s.color || C.text }}>{s.value}</p>
-            {s.sub && <p className="text-xs mt-1 font-medium font-mono" style={{ color: s.color || C.textMuted }}>{s.sub}</p>}
-          </Card>
-        ))}
+        <Card className="p-4 lg:p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 font-mono" style={{ color: C.textDim }}>Portfolio Value</p>
+          {startingCapital > 0 ? (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: C.text }}>${fmtK(portfolioValue)}</p>
+              {hasClosedTrades && (
+                <p className="text-xs mt-1 font-medium font-mono" style={{ color: totalPnl >= 0 ? C.accent : C.red }}>
+                  {totalPnl >= 0 ? "+" : ""}{((totalPnl / startingCapital) * 100).toFixed(1)}% all time
+                </p>
+              )}
+            </>
+          ) : (
+            <button onClick={() => setPage("journal")} className="text-sm font-semibold font-mono" style={{ color: C.accent }}>Set Capital →</button>
+          )}
+        </Card>
+
+        <Card className="p-4 lg:p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 font-mono" style={{ color: C.textDim }}>Daily P&L</p>
+          {todayEntries.length > 0 ? (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: dailyPnl >= 0 ? C.accent : C.red }}>
+                {dailyPnl >= 0 ? "+" : ""}${fmtK(dailyPnl)}
+              </p>
+              {startingCapital > 0 && (
+                <p className="text-xs mt-1 font-medium font-mono" style={{ color: dailyPnl >= 0 ? C.accent : C.red }}>
+                  {dailyPnlPct >= 0 ? "+" : ""}{dailyPnlPct.toFixed(2)}%
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: C.textDim }}>$0.00</p>
+              <p className="text-xs mt-1 font-mono" style={{ color: C.textDim }}>No trades today</p>
+            </>
+          )}
+        </Card>
+
+        <Card className="p-4 lg:p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 font-mono" style={{ color: C.textDim }}>Win Rate</p>
+          {hasClosedTrades ? (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: winRate >= 50 ? C.accent : C.red }}>{winRate.toFixed(1)}%</p>
+              <p className="text-xs mt-1 font-medium font-mono" style={{ color: streak > 0 ? C.accent : C.textDim }}>
+                {streak > 0 ? `${streak} win streak` : `${winners.length}W ${losers.length}L`}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: C.textDim }}>—</p>
+              <p className="text-xs mt-1 font-mono" style={{ color: C.textDim }}>Close a trade to track</p>
+            </>
+          )}
+        </Card>
+
+        <Card className="p-4 lg:p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 font-mono" style={{ color: C.textDim }}>Profit Factor</p>
+          {closedEntries.length >= 2 ? (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: profitFactor >= 1.5 ? C.accent : profitFactor >= 1 ? C.amber : C.red }}>
+                {profitFactor === Infinity ? "∞" : profitFactor.toFixed(2)}
+              </p>
+              <p className="text-xs mt-1 font-mono" style={{ color: C.textDim }}>
+                {profitFactor >= 2 ? "Excellent" : profitFactor >= 1.5 ? "Good" : profitFactor >= 1 ? "Break-even zone" : "Needs work"}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: C.textDim }}>—</p>
+              <p className="text-xs mt-1 font-mono" style={{ color: C.textDim }}>Needs 2+ closed trades</p>
+            </>
+          )}
+        </Card>
       </div>
 
+      {/* Equity Curve + Grade Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card className="lg:col-span-2 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider font-display" style={{ color: C.text }}>Equity Curve</h2>
-            <div className="flex gap-1">
-              {["1W", "1M", "3M", "YTD"].map((t) => (
-                <button
-                  key={t}
-                  className="px-2.5 py-1 rounded text-[10px] font-semibold uppercase font-mono"
-                  style={{ background: t === "1M" ? C.accentDim : "transparent", color: t === "1M" ? C.accent : C.textDim }}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Equity Curve</h2>
           <div className="w-full" style={{ height: 200 }}>
-            <svg width="100%" height="100%" viewBox="0 0 600 200" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={C.accent} stopOpacity="0.2" />
-                  <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {(() => {
-                const pts = Array.from({ length: 60 }, (_, i) => {
-                  const y = 140 - i * 1.5 - Math.sin(i * 0.3) * 20 - Math.random() * 8;
-                  return `${i * 10.2},${Math.max(20, Math.min(180, y))}`;
-                });
-                return (
-                  <>
-                    <polygon points={`0,200 ${pts.join(" ")} 600,200`} fill="url(#eqGrad)" />
-                    <polyline points={pts.join(" ")} fill="none" stroke={C.accent} strokeWidth="2" />
-                  </>
-                );
-              })()}
-            </svg>
+            {equityCurve.length >= 2 ? (
+              <svg width="100%" height="100%" viewBox="0 0 600 200" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={totalPnl >= 0 ? C.accent : C.red} stopOpacity="0.2" />
+                    <stop offset="100%" stopColor={totalPnl >= 0 ? C.accent : C.red} stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                {(() => {
+                  const values = equityCurve.map((p) => p.value);
+                  const min = Math.min(...values) * 0.98;
+                  const max = Math.max(...values) * 1.02;
+                  const range = max - min || 1;
+                  const pts = values.map((v, i) => {
+                    const x = (i / (values.length - 1)) * 600;
+                    const y = 190 - ((v - min) / range) * 170;
+                    return `${x},${y}`;
+                  });
+                  // Starting capital line
+                  const capY = startingCapital > 0 ? 190 - ((startingCapital - min) / range) * 170 : null;
+                  return (
+                    <>
+                      {capY !== null && (
+                        <line x1="0" y1={capY} x2="600" y2={capY} stroke={C.border} strokeDasharray="4,4" strokeWidth="1" />
+                      )}
+                      <polygon points={`0,200 ${pts.join(" ")} 600,200`} fill="url(#eqGrad)" />
+                      <polyline points={pts.join(" ")} fill="none" stroke={totalPnl >= 0 ? C.accent : C.red} strokeWidth="2" />
+                      {/* End dot */}
+                      {pts.length > 0 && (() => {
+                        const last = pts[pts.length - 1].split(",");
+                        return <circle cx={last[0]} cy={last[1]} r="4" fill={totalPnl >= 0 ? C.accent : C.red} />;
+                      })()}
+                    </>
+                  );
+                })()}
+              </svg>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center">
+                <svg width="100%" height="60" viewBox="0 0 600 60" preserveAspectRatio="none">
+                  <line x1="0" y1="30" x2="600" y2="30" stroke={C.border} strokeDasharray="6,6" strokeWidth="1" />
+                </svg>
+                <p className="text-xs font-display mt-4" style={{ color: C.textDim }}>
+                  {hasClosedTrades ? "One more closed trade to draw the curve" : "Your equity curve builds as you close trades"}
+                </p>
+              </div>
+            )}
           </div>
+          {equityCurve.length >= 2 && (
+            <div className="flex justify-between text-[10px] mt-2 font-mono" style={{ color: C.textDim }}>
+              <span>{equityCurve[0].date}</span>
+              <span>Total P&L: <span style={{ color: totalPnl >= 0 ? C.accent : C.red }}>{totalPnl >= 0 ? "+" : ""}${fmtK(totalPnl)}</span></span>
+              <span>{equityCurve[equityCurve.length - 1].date}</span>
+            </div>
+          )}
         </Card>
 
         <Card className="p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Sector Allocation</h2>
-          <div className="space-y-3">
-            {[
-              { s: "Technology", w: 62, c: C.accent },
-              { s: "Healthcare", w: 14, c: C.blue },
-              { s: "Industrials", w: 12, c: C.purple },
-              { s: "Utilities", w: 8, c: C.amber },
-              { s: "Other", w: 4, c: C.textDim },
-            ].map((item) => (
-              <div key={item.s}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-mono" style={{ color: C.textMuted }}>{item.s}</span>
-                  <span className="font-semibold font-mono" style={{ color: item.c }}>{item.w}%</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: C.surface3 }}>
-                  <div className="h-full rounded-full" style={{ width: `${item.w}%`, background: item.c }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Performance by Grade</h2>
+          {gradeBreakdown.length > 0 ? (
+            <div className="space-y-3">
+              {gradeBreakdown.map((g) => {
+                const maxCount = Math.max(...gradeBreakdown.map((x) => x.count));
+                return (
+                  <div key={g.grade}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-bold font-mono" style={{ color: gradeBarColor(g.grade) }}>{g.grade}</span>
+                      <span className="font-mono" style={{ color: C.textMuted }}>
+                        {g.count} trade{g.count !== 1 ? "s" : ""} · <span style={{ color: g.pnl >= 0 ? C.accent : C.red }}>{g.pnl >= 0 ? "+" : ""}${fmtK(g.pnl)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: C.surface3 }}>
+                      <div className="h-full rounded-full" style={{ width: `${(g.count / maxCount) * 100}%`, background: gradeBarColor(g.grade) }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center py-8">
+              <p className="text-xs font-display" style={{ color: C.textDim }}>Grade your trades to see performance patterns</p>
+              <button onClick={() => setPage("journal")} className="mt-3 text-xs font-semibold font-mono" style={{ color: C.accent }}>
+                Open Journal →
+              </button>
+            </div>
+          )}
         </Card>
       </div>
 
+      {/* Open Positions */}
       <Card className="p-5 overflow-hidden">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold uppercase tracking-wider font-display" style={{ color: C.text }}>Active Positions</h2>
-          <button onClick={() => setPage("trade")} className="text-xs font-semibold hover:underline font-mono" style={{ color: C.accent }}>
-            View All →
+          <h2 className="text-sm font-bold uppercase tracking-wider font-display" style={{ color: C.text }}>Open Positions</h2>
+          <button onClick={() => setPage("journal")} className="text-xs font-semibold hover:underline font-mono" style={{ color: C.accent }}>
+            Journal →
           </button>
         </div>
-        <div className="overflow-x-auto -mx-5">
-          <table className="w-full min-w-[700px]">
-            <thead>
-              <tr className="border-b" style={{ borderColor: C.border }}>
-                {["Symbol", "Momentum", "Signal", "Entry", "Current", "P&L", ""].map((h, i) => (
-                  <th key={i} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.15em] font-mono" style={{ color: C.textDim }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_POSITIONS.slice(0, 5).map((pos) => (
-                <tr
-                  key={pos.sym}
-                  className="border-b transition-colors cursor-pointer"
-                  style={{ borderColor: "rgba(42,43,58,0.5)" }}
-                  onClick={() => setPage("trade")}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.surface2; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  <td className="px-5 py-3">
-                    <span className="text-sm font-bold font-mono" style={{ color: C.text }}>{pos.sym}</span>
-                    <span className="text-xs ml-2" style={{ color: C.textDim }}>{pos.name}</span>
-                  </td>
-                  <td className="px-5 py-3 w-28">
-                    <MomentumBar value={pos.momentum} />
-                  </td>
-                  <td className="px-5 py-3">
-                    <Badge
-                      color={pos.signal.includes("STRONG") ? "accent" : pos.signal === "WEAK" ? "red" : "amber"}
-                      size="xs"
-                    >
-                      {pos.signal}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3 text-sm font-mono" style={{ color: C.textMuted }}>${fmt(pos.entry)}</td>
-                  <td className="px-5 py-3 text-sm font-mono" style={{ color: C.text }}>${fmt(pos.current)}</td>
-                  <td className="px-5 py-3">
-                    <span className="text-sm font-semibold font-mono" style={{ color: pos.pnl >= 0 ? C.accent : C.red }}>
-                      {pos.pnl >= 0 ? "+" : ""}{pos.pnlPct.toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Icon name="chevron" size={14} color={C.textDim} />
-                  </td>
+
+        {openEntries.length > 0 ? (
+          <div className="overflow-x-auto -mx-5">
+            <table className="w-full min-w-[500px]">
+              <thead>
+                <tr className="border-b" style={{ borderColor: C.border }}>
+                  {["Symbol", "Side", "Entry", "Qty", "Position $", "Date"].map((h, i) => (
+                    <th key={i} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.15em] font-mono" style={{ color: C.textDim }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {openEntries.map((pos) => (
+                  <tr key={pos.id} className="border-b transition-colors cursor-pointer"
+                    style={{ borderColor: "rgba(42,43,58,0.5)" }}
+                    onClick={() => setPage("journal")}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.surface2; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                    <td className="px-5 py-3">
+                      <span className="text-sm font-bold font-mono" style={{ color: C.text }}>{pos.symbol}</span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge color={pos.side === "LONG" ? "accent" : "red"} size="xs">{pos.side}</Badge>
+                    </td>
+                    <td className="px-5 py-3 text-sm font-mono" style={{ color: C.textMuted }}>${fmt(pos.entry_price)}</td>
+                    <td className="px-5 py-3 text-sm font-mono" style={{ color: C.textMuted }}>{pos.quantity}</td>
+                    <td className="px-5 py-3 text-sm font-mono" style={{ color: C.text }}>${fmtK(pos.entry_price * pos.quantity)}</td>
+                    <td className="px-5 py-3 text-xs font-mono" style={{ color: C.textDim }}>{pos.trade_date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-xs font-display" style={{ color: C.textDim }}>
+              {hasData ? "All positions are closed. Nice discipline." : "No open positions yet. Log a trade in the Journal to see it here."}
+            </p>
+            {!hasData && (
+              <button onClick={() => setPage("journal")} className="mt-3 text-xs font-semibold font-mono" style={{ color: C.accent }}>
+                Log First Trade →
+              </button>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );
