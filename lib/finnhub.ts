@@ -13,7 +13,7 @@ const FINNHUB_BASE_URL = "https://finnhub.io/api/v1";
  * Finnhub free tier: 60 calls/minute.
  * We stagger requests with a delay to stay well under the limit.
  */
-const RATE_LIMIT_DELAY_MS = 120; // ~500 calls/min headroom
+const RATE_LIMIT_DELAY_MS = 80; // ~500 calls/min headroom
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
 const REQUEST_TIMEOUT_MS = 8000;
