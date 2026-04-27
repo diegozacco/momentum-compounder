@@ -1,5 +1,4 @@
-json{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+{
   "framework": "nextjs",
   "functions": {
     "app/api/scanner/route.ts": {
