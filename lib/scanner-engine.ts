@@ -18,7 +18,7 @@ import type {
 // Scans wide, returns top 30 ranked by composite score.
 
 export const SCAN_UNIVERSE: UniverseEntry[] = [
-  // ── Technology (30) ────────────────────────────────────
+  // ── Technology (22) ────────────────────────────────────
   { symbol: "NVDA", name: "NVIDIA Corp", sector: "Technology" },
   { symbol: "AVGO", name: "Broadcom Inc", sector: "Technology" },
   { symbol: "META", name: "Meta Platforms", sector: "Technology" },
@@ -34,62 +34,47 @@ export const SCAN_UNIVERSE: UniverseEntry[] = [
   { symbol: "ORCL", name: "Oracle Corp", sector: "Technology" },
   { symbol: "CRM", name: "Salesforce Inc", sector: "Technology" },
   { symbol: "NOW", name: "ServiceNow Inc", sector: "Technology" },
-  { symbol: "SNPS", name: "Synopsys Inc", sector: "Technology" },
-  { symbol: "CDNS", name: "Cadence Design", sector: "Technology" },
   { symbol: "MRVL", name: "Marvell Technology", sector: "Technology" },
   { symbol: "MU", name: "Micron Technology", sector: "Technology" },
-  { symbol: "INTC", name: "Intel Corp", sector: "Technology" },
-  { symbol: "ADBE", name: "Adobe Inc", sector: "Technology" },
-  { symbol: "SHOP", name: "Shopify Inc", sector: "Technology" },
   { symbol: "CRWD", name: "CrowdStrike Holdings", sector: "Technology" },
-  { symbol: "FTNT", name: "Fortinet Inc", sector: "Technology" },
   { symbol: "DDOG", name: "Datadog Inc", sector: "Technology" },
   { symbol: "NET", name: "Cloudflare Inc", sector: "Technology" },
   { symbol: "SNOW", name: "Snowflake Inc", sector: "Technology" },
-  { symbol: "HUBS", name: "HubSpot Inc", sector: "Technology" },
-  { symbol: "TEAM", name: "Atlassian Corp", sector: "Technology" },
-  { symbol: "ZS", name: "Zscaler Inc", sector: "Technology" },
+  { symbol: "SHOP", name: "Shopify Inc", sector: "Technology" },
 
-  // ── Energy (10) ────────────────────────────────────────
+  // ── Energy (8) ─────────────────────────────────────────
   { symbol: "XOM", name: "Exxon Mobil", sector: "Energy" },
   { symbol: "CVX", name: "Chevron Corp", sector: "Energy" },
   { symbol: "TRGP", name: "Targa Resources", sector: "Energy" },
   { symbol: "OKE", name: "ONEOK Inc", sector: "Energy" },
   { symbol: "WMB", name: "Williams Companies", sector: "Energy" },
   { symbol: "SLB", name: "Schlumberger Ltd", sector: "Energy" },
-  { symbol: "EOG", name: "EOG Resources", sector: "Energy" },
-  { symbol: "PXD", name: "Pioneer Natural Resources", sector: "Energy" },
   { symbol: "MPC", name: "Marathon Petroleum", sector: "Energy" },
   { symbol: "VLO", name: "Valero Energy", sector: "Energy" },
 
-  // ── Industrials (12) ───────────────────────────────────
+  // ── Industrials (10) ───────────────────────────────────
   { symbol: "GE", name: "GE Aerospace", sector: "Industrials" },
   { symbol: "TT", name: "Trane Technologies", sector: "Industrials" },
   { symbol: "URI", name: "United Rentals", sector: "Industrials" },
   { symbol: "CAT", name: "Caterpillar Inc", sector: "Industrials" },
   { symbol: "DE", name: "Deere & Company", sector: "Industrials" },
   { symbol: "ETN", name: "Eaton Corp", sector: "Industrials" },
-  { symbol: "ITW", name: "Illinois Tool Works", sector: "Industrials" },
-  { symbol: "EMR", name: "Emerson Electric", sector: "Industrials" },
   { symbol: "UBER", name: "Uber Technologies", sector: "Industrials" },
-  { symbol: "FI", name: "Fiserv Inc", sector: "Industrials" },
   { symbol: "AXON", name: "Axon Enterprise", sector: "Industrials" },
   { symbol: "PWR", name: "Quanta Services", sector: "Industrials" },
+  { symbol: "FI", name: "Fiserv Inc", sector: "Industrials" },
 
-  // ── Utilities (8) ──────────────────────────────────────
+  // ── Utilities (6) ──────────────────────────────────────
   { symbol: "VST", name: "Vistra Corp", sector: "Utilities" },
   { symbol: "CEG", name: "Constellation Energy", sector: "Utilities" },
   { symbol: "NRG", name: "NRG Energy", sector: "Utilities" },
   { symbol: "NEE", name: "NextEra Energy", sector: "Utilities" },
   { symbol: "SO", name: "Southern Company", sector: "Utilities" },
   { symbol: "DUK", name: "Duke Energy", sector: "Utilities" },
-  { symbol: "AES", name: "AES Corp", sector: "Utilities" },
-  { symbol: "EXC", name: "Exelon Corp", sector: "Utilities" },
 
-  // ── Healthcare (12) ────────────────────────────────────
+  // ── Healthcare (10) ────────────────────────────────────
   { symbol: "LLY", name: "Eli Lilly", sector: "Healthcare" },
   { symbol: "UNH", name: "UnitedHealth Group", sector: "Healthcare" },
-  { symbol: "JNJ", name: "Johnson & Johnson", sector: "Healthcare" },
   { symbol: "ABBV", name: "AbbVie Inc", sector: "Healthcare" },
   { symbol: "MRK", name: "Merck & Co", sector: "Healthcare" },
   { symbol: "TMO", name: "Thermo Fisher Scientific", sector: "Healthcare" },
@@ -98,9 +83,8 @@ export const SCAN_UNIVERSE: UniverseEntry[] = [
   { symbol: "BSX", name: "Boston Scientific", sector: "Healthcare" },
   { symbol: "SYK", name: "Stryker Corp", sector: "Healthcare" },
   { symbol: "REGN", name: "Regeneron Pharmaceuticals", sector: "Healthcare" },
-  { symbol: "HCA", name: "HCA Healthcare", sector: "Healthcare" },
 
-  // ── Financials (12) ────────────────────────────────────
+  // ── Financials (10) ────────────────────────────────────
   { symbol: "FICO", name: "Fair Isaac Corp", sector: "Financials" },
   { symbol: "GS", name: "Goldman Sachs", sector: "Financials" },
   { symbol: "JPM", name: "JPMorgan Chase", sector: "Financials" },
@@ -109,56 +93,42 @@ export const SCAN_UNIVERSE: UniverseEntry[] = [
   { symbol: "MS", name: "Morgan Stanley", sector: "Financials" },
   { symbol: "BLK", name: "BlackRock Inc", sector: "Financials" },
   { symbol: "SPGI", name: "S&P Global", sector: "Financials" },
-  { symbol: "ICE", name: "Intercontinental Exchange", sector: "Financials" },
-  { symbol: "CME", name: "CME Group", sector: "Financials" },
   { symbol: "COIN", name: "Coinbase Global", sector: "Financials" },
   { symbol: "HOOD", name: "Robinhood Markets", sector: "Financials" },
 
-  // ── Consumer Discretionary (12) ────────────────────────
+  // ── Consumer Discretionary (8) ─────────────────────────
   { symbol: "TSLA", name: "Tesla Inc", sector: "Consumer Discretionary" },
   { symbol: "AMZN", name: "Amazon.com Inc", sector: "Consumer Discretionary" },
   { symbol: "BKNG", name: "Booking Holdings", sector: "Consumer Discretionary" },
   { symbol: "HD", name: "Home Depot", sector: "Consumer Discretionary" },
-  { symbol: "LOW", name: "Lowe's Companies", sector: "Consumer Discretionary" },
-  { symbol: "NKE", name: "Nike Inc", sector: "Consumer Discretionary" },
-  { symbol: "SBUX", name: "Starbucks Corp", sector: "Consumer Discretionary" },
-  { symbol: "TJX", name: "TJX Companies", sector: "Consumer Discretionary" },
   { symbol: "CMG", name: "Chipotle Mexican Grill", sector: "Consumer Discretionary" },
-  { symbol: "ORLY", name: "O'Reilly Automotive", sector: "Consumer Discretionary" },
   { symbol: "DECK", name: "Deckers Outdoor", sector: "Consumer Discretionary" },
   { symbol: "RCL", name: "Royal Caribbean", sector: "Consumer Discretionary" },
+  { symbol: "ORLY", name: "O'Reilly Automotive", sector: "Consumer Discretionary" },
 
-  // ── Communication Services (8) ─────────────────────────
+  // ── Communication Services (6) ─────────────────────────
   { symbol: "GOOG", name: "Alphabet Inc", sector: "Communication Services" },
   { symbol: "NFLX", name: "Netflix Inc", sector: "Communication Services" },
   { symbol: "DIS", name: "Walt Disney Co", sector: "Communication Services" },
   { symbol: "SPOT", name: "Spotify Technology", sector: "Communication Services" },
   { symbol: "TTWO", name: "Take-Two Interactive", sector: "Communication Services" },
-  { symbol: "EA", name: "Electronic Arts", sector: "Communication Services" },
   { symbol: "RBLX", name: "Roblox Corp", sector: "Communication Services" },
-  { symbol: "ROKU", name: "Roku Inc", sector: "Communication Services" },
 
-  // ── Materials (8) ──────────────────────────────────────
+  // ── Materials (4) ──────────────────────────────────────
   { symbol: "FCX", name: "Freeport-McMoRan", sector: "Materials" },
-  { symbol: "NEM", name: "Newmont Corp", sector: "Materials" },
   { symbol: "NUE", name: "Nucor Corp", sector: "Materials" },
-  { symbol: "STLD", name: "Steel Dynamics", sector: "Materials" },
-  { symbol: "APD", name: "Air Products", sector: "Materials" },
   { symbol: "LIN", name: "Linde PLC", sector: "Materials" },
   { symbol: "SHW", name: "Sherwin-Williams", sector: "Materials" },
-  { symbol: "VMC", name: "Vulcan Materials", sector: "Materials" },
 
-  // ── Real Estate (4) ────────────────────────────────────
+  // ── Real Estate (3) ────────────────────────────────────
   { symbol: "EQIX", name: "Equinix Inc", sector: "Real Estate" },
   { symbol: "AMT", name: "American Tower", sector: "Real Estate" },
-  { symbol: "PLD", name: "Prologis Inc", sector: "Real Estate" },
   { symbol: "DLR", name: "Digital Realty", sector: "Real Estate" },
 
-  // ── Consumer Staples (4) ───────────────────────────────
+  // ── Consumer Staples (3) ───────────────────────────────
   { symbol: "COST", name: "Costco Wholesale", sector: "Consumer Staples" },
   { symbol: "WMT", name: "Walmart Inc", sector: "Consumer Staples" },
   { symbol: "PG", name: "Procter & Gamble", sector: "Consumer Staples" },
-  { symbol: "KO", name: "Coca-Cola Co", sector: "Consumer Staples" },
 ];
 
 // ── Momentum Scoring ─────────────────────────────────────
