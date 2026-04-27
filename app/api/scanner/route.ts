@@ -24,6 +24,7 @@ import type { ScannerApiResponse, ScannerApiError } from "../../../types/scanner
  * This means Finnhub is hit at most once per 5 minutes regardless
  * of how many clients request the scanner.
  */
+export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 // ── In-memory cache layer ────────────────────────────────
