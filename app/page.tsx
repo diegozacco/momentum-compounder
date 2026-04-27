@@ -1512,149 +1512,502 @@ function RotationPage() {
 
 // ━━━ JOURNAL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function JournalPage() {
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const [newEntry, setNewEntry] = useState(false);
+interface DbJournalEntry {
+  id: string;
+  symbol: string;
+  side: "LONG" | "SHORT";
+  entry_price: number;
+  exit_price: number | null;
+  quantity: number;
+  pnl: number | null;
+  pnl_pct: number | null;
+  trade_date: string;
+  grade: string | null;
+  notes: string | null;
+  tags: string[];
+  capital_at_entry: number | null;
+  position_size_pct: number | null;
+  created_at: string;
+}
 
-  const gradeColor = (g: string): string => {
+function JournalPage() {
+  const [entries, setEntries] = useState<DbJournalEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [startingCapital, setStartingCapital] = useState<number>(0);
+  const [editingCapital, setEditingCapital] = useState(false);
+  const [capitalInput, setCapitalInput] = useState("");
+
+  // Form state
+  const [formSymbol, setFormSymbol] = useState("");
+  const [formSide, setFormSide] = useState<"LONG" | "SHORT">("LONG");
+  const [formEntry, setFormEntry] = useState("");
+  const [formExit, setFormExit] = useState("");
+  const [formQty, setFormQty] = useState("1");
+  const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
+  const [formGrade, setFormGrade] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [formTags, setFormTags] = useState("");
+
+  const supabase = createClient();
+
+  // Load entries + starting capital
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Load profile for starting capital
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("starting_capital")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.starting_capital) {
+        setStartingCapital(Number(profile.starting_capital));
+        setCapitalInput(String(profile.starting_capital));
+      }
+
+      // Load journal entries
+      const { data, error } = await supabase
+        .from("journal_entries")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("trade_date", { ascending: false });
+
+      if (!error && data) setEntries(data as DbJournalEntry[]);
+      setIsLoading(false);
+    };
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save starting capital
+  const saveCapital = async () => {
+    const val = parseFloat(capitalInput);
+    if (isNaN(val) || val < 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("user_profiles").upsert({
+      id: user.id,
+      starting_capital: val,
+    });
+
+    setStartingCapital(val);
+    setEditingCapital(false);
+  };
+
+  // Save new entry
+  const saveEntry = async () => {
+    if (!formSymbol || !formEntry) return;
+    setSaving(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+
+    const entryPrice = parseFloat(formEntry);
+    const exitPrice = formExit ? parseFloat(formExit) : null;
+    const qty = parseInt(formQty) || 1;
+
+    let pnl: number | null = null;
+    let pnlPct: number | null = null;
+    if (exitPrice !== null) {
+      const direction = formSide === "LONG" ? 1 : -1;
+      pnl = direction * (exitPrice - entryPrice) * qty;
+      pnlPct = direction * ((exitPrice - entryPrice) / entryPrice) * 100;
+    }
+
+    const positionSize = entryPrice * qty;
+    const positionSizePct = startingCapital > 0 ? (positionSize / startingCapital) * 100 : null;
+
+    const { data, error } = await supabase
+      .from("journal_entries")
+      .insert({
+        user_id: user.id,
+        symbol: formSymbol.toUpperCase(),
+        side: formSide,
+        entry_price: entryPrice,
+        exit_price: exitPrice,
+        quantity: qty,
+        pnl,
+        pnl_pct: pnlPct,
+        trade_date: formDate,
+        grade: formGrade || null,
+        notes: formNotes || null,
+        tags: formTags ? formTags.split(",").map((t) => t.trim().toLowerCase()) : [],
+        capital_at_entry: startingCapital > 0 ? startingCapital : null,
+        position_size_pct: positionSizePct,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setEntries([data as DbJournalEntry, ...entries]);
+      // Reset form
+      setFormSymbol(""); setFormEntry(""); setFormExit(""); setFormQty("1");
+      setFormGrade(""); setFormNotes(""); setFormTags("");
+      setFormDate(new Date().toISOString().split("T")[0]);
+      setShowForm(false);
+    }
+    setSaving(false);
+  };
+
+  // Delete entry
+  const deleteEntry = async (id: string) => {
+    await supabase.from("journal_entries").delete().eq("id", id);
+    setEntries(entries.filter((e) => e.id !== id));
+    setDeleteConfirm(null);
+    setExpanded(null);
+  };
+
+  const gradeColor = (g: string | null): string => {
+    if (!g) return C.textDim;
     if (g.startsWith("A")) return C.accent;
     if (g === "B") return C.blue;
     if (g === "C") return C.amber;
     return C.red;
   };
 
-  const winners = MOCK_JOURNAL.filter((j) => j.pnl > 0).length;
-  const totalPnl = MOCK_JOURNAL.reduce((a, j) => a + j.pnl, 0);
-  const avgWin = MOCK_JOURNAL.filter((j) => j.pnl > 0).reduce((a, j) => a + j.pnl, 0) / winners || 0;
-  const losers = MOCK_JOURNAL.filter((j) => j.pnl < 0);
-  const avgLoss = losers.reduce((a, j) => a + j.pnl, 0) / losers.length || 0;
+  // Computed stats
+  const closedEntries = entries.filter((e) => e.pnl !== null);
+  const totalPnl = closedEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const winners = closedEntries.filter((e) => (e.pnl ?? 0) > 0);
+  const losers = closedEntries.filter((e) => (e.pnl ?? 0) < 0);
+  const winRate = closedEntries.length > 0 ? (winners.length / closedEntries.length) * 100 : 0;
+  const avgWin = winners.length > 0 ? winners.reduce((a, e) => a + (e.pnl ?? 0), 0) / winners.length : 0;
+  const avgLoss = losers.length > 0 ? Math.abs(losers.reduce((a, e) => a + (e.pnl ?? 0), 0) / losers.length) : 0;
+  const currentCapital = startingCapital + totalPnl;
+
+  if (isLoading) {
+    return (
+      <div>
+        <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display mb-8" style={{ color: C.text }}>Trade Journal</h1>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i} className="p-4"><div className="animate-pulse"><div className="h-3 w-16 rounded mb-2" style={{ background: C.surface3 }} /><div className="h-6 w-20 rounded" style={{ background: C.surface3 }} /></div></Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight font-display" style={{ color: C.text }}>Trade Journal</h1>
-          <p className="text-sm mt-1 font-mono" style={{ color: C.textMuted }}>Track execution & identify patterns</p>
+          <p className="text-sm mt-1 font-mono" style={{ color: C.textMuted }}>
+            {entries.length} trades · {closedEntries.length} closed
+          </p>
         </div>
-        <button
-          onClick={() => setNewEntry(!newEntry)}
+        <button onClick={() => setShowForm(!showForm)}
           className="px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all self-start font-mono"
-          style={{
-            background: `linear-gradient(135deg, ${C.accent}, #00b894)`,
-            color: "#000",
-            boxShadow: `0 4px 15px ${C.accentGlow}`,
-          }}
-        >
+          style={{ background: `linear-gradient(135deg, ${C.accent}, #00b894)`, color: "#000", boxShadow: `0 4px 15px ${C.accentGlow}` }}>
           + New Entry
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {[
-          { l: "Total P&L", v: `$${fmtK(totalPnl)}`, c: totalPnl >= 0 ? C.accent : C.red },
-          { l: "Win Rate", v: `${((winners / MOCK_JOURNAL.length) * 100).toFixed(0)}%`, c: C.accent },
-          { l: "Avg Win", v: `$${fmtK(avgWin)}`, c: C.accent },
-          { l: "Avg Loss", v: `$${fmtK(Math.abs(avgLoss))}`, c: C.red },
-        ].map((s, i) => (
-          <Card key={i} className="p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-1 font-mono" style={{ color: C.textDim }}>{s.l}</p>
-            <p className="text-xl font-bold font-mono" style={{ color: s.c }}>{s.v}</p>
-          </Card>
-        ))}
+      {/* Starting Capital + Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        {/* Starting Capital - editable */}
+        <Card className="p-4 cursor-pointer" hover onClick={() => { setEditingCapital(true); setCapitalInput(String(startingCapital)); }}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-1 font-mono" style={{ color: C.textDim }}>
+            {editingCapital ? "Set Capital" : "Starting Capital"}
+          </p>
+          {editingCapital ? (
+            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+              <input type="number" value={capitalInput} onChange={(e) => setCapitalInput(e.target.value)}
+                className="w-full px-2 py-1 rounded text-sm outline-none font-mono"
+                style={{ background: C.surface3, border: `1px solid ${C.accent}`, color: C.text }}
+                onKeyDown={(e) => e.key === "Enter" && saveCapital()}
+                autoFocus />
+              <button onClick={saveCapital} className="px-2 rounded text-xs font-bold" style={{ background: C.accentDim, color: C.accent }}>✓</button>
+            </div>
+          ) : (
+            <p className="text-xl font-bold font-mono" style={{ color: startingCapital > 0 ? C.text : C.textDim }}>
+              {startingCapital > 0 ? `$${fmtK(startingCapital)}` : "Set →"}
+            </p>
+          )}
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-1 font-mono" style={{ color: C.textDim }}>Current Capital</p>
+          <p className="text-xl font-bold font-mono" style={{ color: currentCapital >= startingCapital ? C.accent : C.red }}>
+            {startingCapital > 0 ? `$${fmtK(currentCapital)}` : "—"}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-1 font-mono" style={{ color: C.textDim }}>Total P&L</p>
+          <p className="text-xl font-bold font-mono" style={{ color: totalPnl >= 0 ? C.accent : C.red }}>
+            {totalPnl >= 0 ? "+" : ""}${fmtK(totalPnl)}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-1 font-mono" style={{ color: C.textDim }}>Win Rate</p>
+          <p className="text-xl font-bold font-mono" style={{ color: winRate >= 50 ? C.accent : C.red }}>
+            {closedEntries.length > 0 ? `${winRate.toFixed(0)}%` : "—"}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-1 font-mono" style={{ color: C.textDim }}>Avg W / L</p>
+          <p className="text-sm font-bold font-mono">
+            <span style={{ color: C.accent }}>${fmtK(avgWin)}</span>
+            <span style={{ color: C.textDim }}> / </span>
+            <span style={{ color: C.red }}>${fmtK(avgLoss)}</span>
+          </p>
+        </Card>
       </div>
 
-      {newEntry && (
-        <Card className="p-5 mb-6" style={{ border: `1px solid rgba(0,212,170,0.3)` }}>
-          <h3 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.accent }}>New Journal Entry</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            {["Symbol", "Side", "Entry $", "Exit $"].map((f) => (
-              <div key={f}>
-                <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>{f}</label>
-                <input className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder={f} />
-              </div>
-            ))}
+      {/* Capital return bar */}
+      {startingCapital > 0 && closedEntries.length > 0 && (
+        <Card className="p-4 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider font-mono" style={{ color: C.textDim }}>Capital Return</span>
+            <span className="text-sm font-bold font-mono" style={{ color: totalPnl >= 0 ? C.accent : C.red }}>
+              {totalPnl >= 0 ? "+" : ""}{((totalPnl / startingCapital) * 100).toFixed(2)}%
+            </span>
           </div>
+          <MomentumBar value={Math.min(100, Math.max(0, 50 + (totalPnl / startingCapital) * 50))} height={6} />
+        </Card>
+      )}
+
+      {/* New Entry Form */}
+      {showForm && (
+        <Card className="p-5 mb-6" style={{ border: `1px solid rgba(0,212,170,0.3)` }}>
+          <h3 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.accent }}>New Trade Entry</h3>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Symbol *</label>
+              <input value={formSymbol} onChange={(e) => setFormSymbol(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono uppercase"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder="NVDA" />
+            </div>
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Side</label>
+              <div className="flex gap-1">
+                {(["LONG", "SHORT"] as const).map((s) => (
+                  <button key={s} onClick={() => setFormSide(s)}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold font-mono"
+                    style={{
+                      background: formSide === s ? (s === "LONG" ? C.accentDim : C.redDim) : C.surface3,
+                      color: formSide === s ? (s === "LONG" ? C.accent : C.red) : C.textDim,
+                      border: `1px solid ${formSide === s ? (s === "LONG" ? "rgba(0,212,170,0.3)" : "rgba(255,71,87,0.3)") : C.border}`,
+                    }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Entry $ *</label>
+              <input type="number" step="0.01" value={formEntry} onChange={(e) => setFormEntry(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder="150.00" />
+            </div>
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Exit $ (optional)</label>
+              <input type="number" step="0.01" value={formExit} onChange={(e) => setFormExit(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder="Open" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Quantity</label>
+              <input type="number" value={formQty} onChange={(e) => setFormQty(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder="1" />
+            </div>
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Date</label>
+              <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            </div>
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Grade</label>
+              <div className="flex gap-1">
+                {["A", "B", "C", "D"].map((g) => (
+                  <button key={g} onClick={() => setFormGrade(formGrade === g ? "" : g)}
+                    className="flex-1 py-2 rounded text-xs font-bold font-mono"
+                    style={{
+                      background: formGrade === g ? C.accentDim : C.surface3,
+                      color: formGrade === g ? C.accent : C.textDim,
+                    }}>
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Tags (comma sep)</label>
+              <input value={formTags} onChange={(e) => setFormTags(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none font-mono"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder="momentum, breakout" />
+            </div>
+          </div>
+
           <div className="mb-4">
             <label className="block text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Trade Notes</label>
-            <textarea rows={3} className="w-full px-3 py-2 rounded-lg text-xs outline-none resize-none font-display" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} placeholder="What was your thesis? Entry trigger? Execution quality?" />
+            <textarea rows={3} value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-xs outline-none resize-none font-display"
+              style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}
+              placeholder="What was your thesis? Entry trigger? Execution quality?" />
           </div>
+
+          {/* Position size preview */}
+          {formEntry && startingCapital > 0 && (
+            <div className="p-3 rounded-lg mb-4 flex items-center justify-between" style={{ background: C.surface2 }}>
+              <span className="text-[10px] font-mono uppercase" style={{ color: C.textDim }}>Position Size</span>
+              <span className="text-xs font-bold font-mono" style={{ color: C.accent }}>
+                ${fmtK(parseFloat(formEntry) * (parseInt(formQty) || 1))} · {((parseFloat(formEntry) * (parseInt(formQty) || 1)) / startingCapital * 100).toFixed(1)}% of capital
+              </span>
+            </div>
+          )}
+
           <div className="flex gap-2">
-            <button className="px-4 py-2 rounded-lg text-xs font-bold uppercase font-mono" style={{ background: C.accentDim, color: C.accent }}>Save Entry</button>
-            <button onClick={() => setNewEntry(false)} className="px-4 py-2 rounded-lg text-xs font-bold uppercase font-mono" style={{ background: C.surface2, color: C.textMuted }}>Cancel</button>
+            <button onClick={saveEntry} disabled={saving || !formSymbol || !formEntry}
+              className="px-4 py-2.5 rounded-lg text-xs font-bold uppercase font-mono transition-all"
+              style={{
+                background: formSymbol && formEntry ? C.accentDim : C.surface3,
+                color: formSymbol && formEntry ? C.accent : C.textDim,
+              }}>
+              {saving ? "Saving..." : "Save Entry"}
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-xs font-bold uppercase font-mono"
+              style={{ background: C.surface2, color: C.textMuted }}>Cancel</button>
           </div>
         </Card>
       )}
 
+      {/* Empty state */}
+      {entries.length === 0 && !showForm && (
+        <Card className="p-8 text-center">
+          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: C.accentDim }}>
+            <Icon name="journal" size={24} color={C.accent} />
+          </div>
+          <h3 className="text-lg font-bold mb-2 font-display" style={{ color: C.text }}>No trades yet</h3>
+          <p className="text-sm mb-4 font-display" style={{ color: C.textMuted }}>Start logging your trades to track performance over time.</p>
+          <button onClick={() => setShowForm(true)}
+            className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider font-mono"
+            style={{ background: C.accentDim, color: C.accent, border: `1px solid rgba(0,212,170,0.2)` }}>
+            Log First Trade
+          </button>
+        </Card>
+      )}
+
+      {/* Entry list */}
       <div className="space-y-3">
-        {MOCK_JOURNAL.map((entry) => (
-          <Card key={entry.id} className="overflow-hidden" hover onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}>
-            <div className="p-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: entry.pnl >= 0 ? C.accentDim : C.redDim }}>
-                    <span className="text-sm font-extrabold font-mono" style={{ color: entry.pnl >= 0 ? C.accent : C.red }}>{entry.sym}</span>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold font-display" style={{ color: C.text }}>{entry.sym}</span>
-                      <Badge color={entry.side === "LONG" ? "accent" : "red"} size="xs">{entry.side}</Badge>
-                      <span
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold font-mono"
-                        style={{
-                          background: `rgba(${gradeColor(entry.grade) === C.accent ? "0,212,170" : gradeColor(entry.grade) === C.red ? "255,71,87" : gradeColor(entry.grade) === C.amber ? "255,165,2" : "55,66,250"},0.15)`,
-                          color: gradeColor(entry.grade),
-                        }}
-                      >
-                        {entry.grade}
+        {entries.map((entry) => {
+          const hasPnl = entry.pnl !== null;
+          const isPositive = (entry.pnl ?? 0) >= 0;
+
+          return (
+            <Card key={entry.id} className="overflow-hidden" hover onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}>
+              <div className="p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: hasPnl ? (isPositive ? C.accentDim : C.redDim) : C.surface3 }}>
+                      <span className="text-sm font-extrabold font-mono" style={{ color: hasPnl ? (isPositive ? C.accent : C.red) : C.textMuted }}>
+                        {entry.symbol}
                       </span>
                     </div>
-                    <p className="text-[10px] mt-0.5 font-mono" style={{ color: C.textDim }}>{entry.date}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-base font-bold font-mono" style={{ color: entry.pnl >= 0 ? C.accent : C.red }}>
-                      {entry.pnl >= 0 ? "+" : ""}${fmt(entry.pnl, 0)}
-                    </p>
-                    <p className="text-xs font-mono" style={{ color: entry.pnl >= 0 ? C.accent : C.red }}>
-                      {entry.pnl >= 0 ? "+" : ""}{entry.pnlPct.toFixed(1)}%
-                    </p>
-                  </div>
-                  <div className="transition-transform" style={{ transform: expanded === entry.id ? "rotate(90deg)" : "none" }}>
-                    <Icon name="chevron" size={16} color={C.textDim} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {expanded === entry.id && (
-              <div className="px-5 pb-5 pt-0" style={{ borderTop: `1px solid ${C.border}` }}>
-                <div className="pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  {[
-                    { l: "Entry", v: `$${fmt(entry.entry)}` },
-                    { l: "Exit", v: entry.exit ? `$${fmt(entry.exit)}` : "OPEN" },
-                    { l: "P&L", v: `${entry.pnl >= 0 ? "+" : ""}$${fmt(entry.pnl, 0)}`, c: entry.pnl >= 0 ? C.accent : C.red },
-                    { l: "Grade", v: entry.grade, c: gradeColor(entry.grade) },
-                  ].map((s, i) => (
-                    <div key={i} className="p-2.5 rounded-lg" style={{ background: C.surface2 }}>
-                      <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>{s.l}</p>
-                      <p className="text-xs font-bold font-mono" style={{ color: s.c || C.text }}>{s.v}</p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold font-display" style={{ color: C.text }}>{entry.symbol}</span>
+                        <Badge color={entry.side === "LONG" ? "accent" : "red"} size="xs">{entry.side}</Badge>
+                        {entry.grade && (
+                          <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold font-mono"
+                            style={{
+                              background: `${gradeColor(entry.grade)}20`,
+                              color: gradeColor(entry.grade),
+                            }}>
+                            {entry.grade}
+                          </span>
+                        )}
+                        {!hasPnl && <Badge color="amber" size="xs">OPEN</Badge>}
+                      </div>
+                      <p className="text-[10px] mt-0.5 font-mono" style={{ color: C.textDim }}>{entry.trade_date} · {entry.quantity} shares</p>
                     </div>
-                  ))}
-                </div>
-                <div className="p-3 rounded-lg mb-3" style={{ background: C.surface2 }}>
-                  <p className="text-[10px] uppercase tracking-widest mb-2 font-mono" style={{ color: C.textDim }}>Trade Notes</p>
-                  <p className="text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>{entry.note}</p>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {entry.tags.map((tag) => (
-                    <Badge key={tag} color="purple" size="xs">{tag}</Badge>
-                  ))}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      {hasPnl ? (
+                        <>
+                          <p className="text-base font-bold font-mono" style={{ color: isPositive ? C.accent : C.red }}>
+                            {isPositive ? "+" : ""}${fmt(entry.pnl ?? 0, 0)}
+                          </p>
+                          <p className="text-xs font-mono" style={{ color: isPositive ? C.accent : C.red }}>
+                            {isPositive ? "+" : ""}{(entry.pnl_pct ?? 0).toFixed(1)}%
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm font-mono" style={{ color: C.textMuted }}>@ ${fmt(entry.entry_price)}</p>
+                      )}
+                    </div>
+                    <div className="transition-transform" style={{ transform: expanded === entry.id ? "rotate(90deg)" : "none" }}>
+                      <Icon name="chevron" size={16} color={C.textDim} />
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
-          </Card>
-        ))}
+
+              {expanded === entry.id && (
+                <div className="px-5 pb-5 pt-0" style={{ borderTop: `1px solid ${C.border}` }} onClick={(e) => e.stopPropagation()}>
+                  <div className="pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    {[
+                      { l: "Entry", v: `$${fmt(entry.entry_price)}` },
+                      { l: "Exit", v: entry.exit_price ? `$${fmt(entry.exit_price)}` : "OPEN", c: entry.exit_price ? undefined : C.amber },
+                      { l: "P&L", v: hasPnl ? `${isPositive ? "+" : ""}$${fmt(entry.pnl ?? 0, 0)}` : "—", c: hasPnl ? (isPositive ? C.accent : C.red) : C.textDim },
+                      { l: "Position", v: entry.position_size_pct ? `${entry.position_size_pct.toFixed(1)}% of capital` : `$${fmtK(entry.entry_price * entry.quantity)}` },
+                    ].map((s, i) => (
+                      <div key={i} className="p-2.5 rounded-lg" style={{ background: C.surface2 }}>
+                        <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>{s.l}</p>
+                        <p className="text-xs font-bold font-mono" style={{ color: s.c || C.text }}>{s.v}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {entry.notes && (
+                    <div className="p-3 rounded-lg mb-3" style={{ background: C.surface2 }}>
+                      <p className="text-[10px] uppercase tracking-widest mb-2 font-mono" style={{ color: C.textDim }}>Trade Notes</p>
+                      <p className="text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>{entry.notes}</p>
+                    </div>
+                  )}
+                  {entry.tags && entry.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {entry.tags.map((tag) => (
+                        <Badge key={tag} color="purple" size="xs">{tag}</Badge>
+                      ))}
+                    </div>
+                  )}
+                  {/* Delete button */}
+                  <div className="flex justify-end">
+                    {deleteConfirm === entry.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono" style={{ color: C.red }}>Delete this trade?</span>
+                        <button onClick={() => deleteEntry(entry.id)} className="px-3 py-1.5 rounded text-xs font-bold font-mono"
+                          style={{ background: C.redDim, color: C.red }}>Yes, delete</button>
+                        <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1.5 rounded text-xs font-mono"
+                          style={{ color: C.textMuted }}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setDeleteConfirm(entry.id)} className="text-xs font-mono"
+                        style={{ color: C.textDim }}>Delete</button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
