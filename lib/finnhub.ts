@@ -3,7 +3,7 @@
 // Production-grade: rate limiting, retries, typed responses
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-import type { FinnhubQuote, FinnhubTechnicalIndicator } from "../types/scanner";
+import type { FinnhubQuote, FinnhubTechnicalIndicator } from "@/types/scanner";
 
 // ── Configuration ────────────────────────────────────────
 
