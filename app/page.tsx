@@ -807,6 +807,7 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
   const [entries, setEntries] = useState<DbJournalEntry[]>([]);
   const [startingCapital, setStartingCapital] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [livePrices, setLivePrices] = useState<Map<string, number>>(new Map());
 
   const supabase = createClient();
 
@@ -830,6 +831,20 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
         .order("trade_date", { ascending: true });
 
       if (data) setEntries(data as DbJournalEntry[]);
+
+      // Fetch live prices for open positions
+      try {
+        const res = await fetch("/api/scanner");
+        if (res.ok) {
+          const scannerData = await res.json();
+          if (scannerData.success && scannerData.data) {
+            const pm = new Map<string, number>();
+            scannerData.data.forEach((s: { symbol: string; price: number }) => pm.set(s.symbol, s.price));
+            setLivePrices(pm);
+          }
+        }
+      } catch { /* scanner unavailable */ }
+
       setIsLoading(false);
     };
     load();
@@ -838,16 +853,28 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
   // Computed stats
   const closedEntries = entries.filter((e) => e.pnl !== null);
   const openEntries = entries.filter((e) => e.exit_price === null);
-  const totalPnl = closedEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+
+  // Realized P&L from closed trades
+  const realizedPnl = closedEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+
+  // Unrealized P&L from open trades with live prices
+  const unrealizedPnl = openEntries.reduce((a, e) => {
+    const livePrice = livePrices.get(e.symbol);
+    if (!livePrice) return a;
+    const direction = e.side === "LONG" ? 1 : -1;
+    return a + direction * (livePrice - e.entry_price) * e.quantity;
+  }, 0);
+
+  const totalPnl = realizedPnl + unrealizedPnl;
   const portfolioValue = startingCapital > 0 ? startingCapital + totalPnl : totalPnl;
   const winners = closedEntries.filter((e) => (e.pnl ?? 0) > 0);
   const losers = closedEntries.filter((e) => (e.pnl ?? 0) < 0);
   const winRate = closedEntries.length > 0 ? (winners.length / closedEntries.length) * 100 : 0;
 
-  // Daily P&L
+  // Daily P&L (closed today + unrealized from open)
   const today = new Date().toISOString().split("T")[0];
-  const todayEntries = closedEntries.filter((e) => e.trade_date === today);
-  const dailyPnl = todayEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const todayClosedPnl = closedEntries.filter((e) => e.trade_date === today).reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const dailyPnl = todayClosedPnl + unrealizedPnl;
   const dailyPnlPct = startingCapital > 0 ? (dailyPnl / startingCapital) * 100 : 0;
 
   // Profit factor
@@ -1141,16 +1168,21 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
             <table className="w-full min-w-[500px]">
               <thead>
                 <tr className="border-b" style={{ borderColor: C.border }}>
-                  {["Symbol", "Side", "Entry", "Qty", "Position $", "Date"].map((h, i) => (
+                  {["Symbol", "Side", "Entry", "Current", "P&L", "Qty"].map((h, i) => (
                     <th key={i} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.15em] font-mono" style={{ color: C.textDim }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {openEntries.map((pos) => (
+                {openEntries.map((pos) => {
+                  const livePrice = livePrices.get(pos.symbol);
+                  const direction = pos.side === "LONG" ? 1 : -1;
+                  const uPnl = livePrice ? direction * (livePrice - pos.entry_price) * pos.quantity : null;
+                  const uPnlPct = livePrice ? direction * ((livePrice - pos.entry_price) / pos.entry_price) * 100 : null;
+                  return (
                   <tr key={pos.id} className="border-b transition-colors cursor-pointer"
                     style={{ borderColor: "rgba(42,43,58,0.5)" }}
-                    onClick={() => setPage("journal")}
+                    onClick={() => setPage("trade")}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.surface2; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
                     <td className="px-5 py-3">
@@ -1160,11 +1192,22 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
                       <Badge color={pos.side === "LONG" ? "accent" : "red"} size="xs">{pos.side}</Badge>
                     </td>
                     <td className="px-5 py-3 text-sm font-mono" style={{ color: C.textMuted }}>${fmt(pos.entry_price)}</td>
+                    <td className="px-5 py-3 text-sm font-mono" style={{ color: livePrice ? C.text : C.textDim }}>
+                      {livePrice ? `$${fmt(livePrice)}` : "—"}
+                    </td>
+                    <td className="px-5 py-3">
+                      {uPnl !== null ? (
+                        <span className="text-sm font-semibold font-mono" style={{ color: uPnl >= 0 ? C.accent : C.red }}>
+                          {uPnl >= 0 ? "+" : ""}{uPnlPct!.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-sm font-mono" style={{ color: C.textDim }}>—</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-sm font-mono" style={{ color: C.textMuted }}>{pos.quantity}</td>
-                    <td className="px-5 py-3 text-sm font-mono" style={{ color: C.text }}>${fmtK(pos.entry_price * pos.quantity)}</td>
-                    <td className="px-5 py-3 text-xs font-mono" style={{ color: C.textDim }}>{pos.trade_date}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1932,6 +1975,7 @@ function JournalPage() {
   const [startingCapital, setStartingCapital] = useState<number>(0);
   const [editingCapital, setEditingCapital] = useState(false);
   const [capitalInput, setCapitalInput] = useState("");
+  const [livePrices, setLivePrices] = useState<Map<string, number>>(new Map());
 
   // Form state
   const [formSymbol, setFormSymbol] = useState("");
@@ -1973,6 +2017,20 @@ function JournalPage() {
         .order("trade_date", { ascending: false });
 
       if (!error && data) setEntries(data as DbJournalEntry[]);
+
+      // Fetch live prices for unrealized P&L
+      try {
+        const res = await fetch("/api/scanner");
+        if (res.ok) {
+          const scannerData = await res.json();
+          if (scannerData.success && scannerData.data) {
+            const pm = new Map<string, number>();
+            scannerData.data.forEach((s: { symbol: string; price: number }) => pm.set(s.symbol, s.price));
+            setLivePrices(pm);
+          }
+        }
+      } catch { /* scanner unavailable */ }
+
       setIsLoading(false);
     };
     load();
@@ -2068,7 +2126,18 @@ function JournalPage() {
 
   // Computed stats
   const closedEntries = entries.filter((e) => e.pnl !== null);
-  const totalPnl = closedEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+  const openEntries = entries.filter((e) => e.exit_price === null);
+  const realizedPnl = closedEntries.reduce((a, e) => a + (e.pnl ?? 0), 0);
+
+  // Unrealized P&L from open positions with live prices
+  const unrealizedPnl = openEntries.reduce((a, e) => {
+    const livePrice = livePrices.get(e.symbol);
+    if (!livePrice) return a;
+    const direction = e.side === "LONG" ? 1 : -1;
+    return a + direction * (livePrice - e.entry_price) * e.quantity;
+  }, 0);
+
+  const totalPnl = realizedPnl + unrealizedPnl;
   const winners = closedEntries.filter((e) => (e.pnl ?? 0) > 0);
   const losers = closedEntries.filter((e) => (e.pnl ?? 0) < 0);
   const winRate = closedEntries.length > 0 ? (winners.length / closedEntries.length) * 100 : 0;
@@ -2299,7 +2368,14 @@ function JournalPage() {
       <div className="space-y-3">
         {entries.map((entry) => {
           const hasPnl = entry.pnl !== null;
-          const isPositive = (entry.pnl ?? 0) >= 0;
+          const livePrice = livePrices.get(entry.symbol);
+          const direction = entry.side === "LONG" ? 1 : -1;
+          const unrealizedEntryPnl = (!hasPnl && livePrice) ? direction * (livePrice - entry.entry_price) * entry.quantity : null;
+          const unrealizedEntryPct = (!hasPnl && livePrice) ? direction * ((livePrice - entry.entry_price) / entry.entry_price) * 100 : null;
+          const displayPnl = hasPnl ? (entry.pnl ?? 0) : (unrealizedEntryPnl ?? 0);
+          const displayPct = hasPnl ? (entry.pnl_pct ?? 0) : (unrealizedEntryPct ?? 0);
+          const hasAnyPnl = hasPnl || unrealizedEntryPnl !== null;
+          const isPositive = displayPnl >= 0;
 
           return (
             <Card key={entry.id} className="overflow-hidden" hover onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}>
@@ -2332,13 +2408,14 @@ function JournalPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      {hasPnl ? (
+                      {hasAnyPnl ? (
                         <>
                           <p className="text-base font-bold font-mono" style={{ color: isPositive ? C.accent : C.red }}>
-                            {isPositive ? "+" : ""}${fmt(entry.pnl ?? 0, 0)}
+                            {isPositive ? "+" : ""}${fmt(displayPnl, 0)}
                           </p>
                           <p className="text-xs font-mono" style={{ color: isPositive ? C.accent : C.red }}>
-                            {isPositive ? "+" : ""}{(entry.pnl_pct ?? 0).toFixed(1)}%
+                            {isPositive ? "+" : ""}{displayPct.toFixed(1)}%
+                            {!hasPnl && <span style={{ color: C.textDim }}> unreal.</span>}
                           </p>
                         </>
                       ) : (
@@ -2358,7 +2435,7 @@ function JournalPage() {
                     {[
                       { l: "Entry", v: `$${fmt(entry.entry_price)}` },
                       { l: "Exit", v: entry.exit_price ? `$${fmt(entry.exit_price)}` : "OPEN", c: entry.exit_price ? undefined : C.amber },
-                      { l: "P&L", v: hasPnl ? `${isPositive ? "+" : ""}$${fmt(entry.pnl ?? 0, 0)}` : "—", c: hasPnl ? (isPositive ? C.accent : C.red) : C.textDim },
+                      { l: "P&L", v: hasAnyPnl ? `${isPositive ? "+" : ""}$${fmt(displayPnl, 0)}${!hasPnl ? " (unreal.)" : ""}` : "—", c: hasAnyPnl ? (isPositive ? C.accent : C.red) : C.textDim },
                       { l: "Position", v: entry.position_size_pct ? `${entry.position_size_pct.toFixed(1)}% of capital` : `$${fmtK(entry.entry_price * entry.quantity)}` },
                     ].map((s, i) => (
                       <div key={i} className="p-2.5 rounded-lg" style={{ background: C.surface2 }}>
