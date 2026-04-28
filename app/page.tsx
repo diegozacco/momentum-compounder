@@ -678,12 +678,14 @@ function AppLayout({
   setPage,
   onLogout,
   userEmail,
+  userName,
   children,
 }: {
   page: PageId;
   setPage: (p: PageId) => void;
   onLogout: () => void;
   userEmail?: string;
+  userName?: string;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -747,7 +749,7 @@ function AppLayout({
         <div className="h-px mb-4" style={{ background: C.border }} />
         <div className="px-3 mb-4">
           <p className="text-xs font-medium font-display truncate" style={{ color: C.textMuted }}>
-            {userEmail?.split("@")[0] || "User"}
+            {userName || userEmail?.split("@")[0] || "User"}
           </p>
           <p className="text-[10px] mt-0.5 font-mono truncate" style={{ color: C.textDim }}>
             {userEmail || "Authenticated"}
@@ -1478,128 +1480,301 @@ function ScannerPage() {
 
 // ━━━ TRADE DETAIL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function TradeDetailPage() {
+function TradeDetailPage({ setPage }: { setPage: (p: PageId) => void }) {
+  const [positions, setPositions] = useState<(DbJournalEntry & { currentPrice?: number; livePnl?: number; livePnlPct?: number })[]>([]);
   const [selected, setSelected] = useState(0);
-  const pos = MOCK_POSITIONS[selected];
+  const [isLoading, setIsLoading] = useState(true);
+  const [startingCapital, setStartingCapital] = useState(0);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Load profile
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("starting_capital")
+        .eq("id", user.id)
+        .single();
+      if (profile?.starting_capital) setStartingCapital(Number(profile.starting_capital));
+
+      // Load open positions (no exit price)
+      const { data } = await supabase
+        .from("journal_entries")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("exit_price", null)
+        .order("trade_date", { ascending: false });
+
+      if (!data || data.length === 0) {
+        setPositions([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Try to get live prices from scanner API
+      try {
+        const res = await fetch("/api/scanner");
+        if (res.ok) {
+          const scannerData = await res.json();
+          if (scannerData.success && scannerData.data) {
+            const priceMap = new Map<string, number>();
+            scannerData.data.forEach((s: { symbol: string; price: number }) => {
+              priceMap.set(s.symbol, s.price);
+            });
+
+            const enriched = (data as DbJournalEntry[]).map((pos) => {
+              const currentPrice = priceMap.get(pos.symbol);
+              if (currentPrice) {
+                const direction = pos.side === "LONG" ? 1 : -1;
+                const livePnl = direction * (currentPrice - pos.entry_price) * pos.quantity;
+                const livePnlPct = direction * ((currentPrice - pos.entry_price) / pos.entry_price) * 100;
+                return { ...pos, currentPrice, livePnl, livePnlPct };
+              }
+              return pos;
+            });
+            setPositions(enriched);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Scanner unavailable — show positions without live prices
+      }
+
+      setPositions(data as DbJournalEntry[]);
+      setIsLoading(false);
+    };
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isLoading) {
+    return (
+      <div>
+        <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight mb-2 font-display" style={{ color: C.text }}>Trade Detail</h1>
+        <p className="text-sm mb-8 font-mono" style={{ color: C.textMuted }}>Loading positions...</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2 p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-8 w-32 rounded" style={{ background: C.surface3 }} />
+              <div className="h-40 rounded-lg" style={{ background: C.surface3 }} />
+              <div className="grid grid-cols-4 gap-3">
+                {[1,2,3,4].map(i => <div key={i} className="h-16 rounded" style={{ background: C.surface3 }} />)}
+              </div>
+            </div>
+          </Card>
+          <div className="space-y-4">
+            <Card className="p-5"><div className="animate-pulse"><div className="h-24 rounded" style={{ background: C.surface3 }} /></div></Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (positions.length === 0) {
+    return (
+      <div>
+        <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight mb-2 font-display" style={{ color: C.text }}>Trade Detail</h1>
+        <p className="text-sm mb-8 font-mono" style={{ color: C.textMuted }}>Position analysis & management</p>
+        <Card className="p-8 text-center">
+          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: C.accentDim }}>
+            <Icon name="trade" size={24} color={C.accent} />
+          </div>
+          <h3 className="text-lg font-bold mb-2 font-display" style={{ color: C.text }}>No Open Positions</h3>
+          <p className="text-sm mb-4 font-display" style={{ color: C.textMuted }}>
+            Log a trade in the Journal without an exit price to see it here with live market data.
+          </p>
+          <button onClick={() => setPage("journal")}
+            className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider font-mono"
+            style={{ background: C.accentDim, color: C.accent, border: `1px solid rgba(0,212,170,0.2)` }}>
+            Open Journal
+          </button>
+        </Card>
+      </div>
+    );
+  }
+
+  const pos = positions[selected] || positions[0];
+  const hasLive = pos.currentPrice !== undefined;
+  const pnl = pos.livePnl ?? 0;
+  const pnlPct = pos.livePnlPct ?? 0;
+  const isPositive = pnl >= 0;
+  const positionValue = pos.entry_price * pos.quantity;
+  const positionPct = startingCapital > 0 ? (positionValue / startingCapital) * 100 : 0;
 
   return (
     <div>
       <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight mb-2 font-display" style={{ color: C.text }}>Trade Detail</h1>
-      <p className="text-sm mb-8 font-mono" style={{ color: C.textMuted }}>Position analysis & management</p>
+      <p className="text-sm mb-8 font-mono" style={{ color: C.textMuted }}>
+        {positions.length} open position{positions.length !== 1 ? "s" : ""} · {hasLive ? "Live prices" : "Entry prices only"}
+      </p>
 
+      {/* Position selector */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
-        {MOCK_POSITIONS.map((p, i) => (
-          <button
-            key={p.sym}
-            onClick={() => setSelected(i)}
+        {positions.map((p, i) => (
+          <button key={p.id} onClick={() => setSelected(i)}
             className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all font-mono"
             style={{
               background: selected === i ? C.accentDim : C.surface2,
               color: selected === i ? C.accent : C.textMuted,
               border: `1px solid ${selected === i ? "rgba(0,212,170,0.3)" : C.border}`,
-            }}
-          >
-            {p.sym}
-            <span className="ml-1.5" style={{ color: p.pnl >= 0 ? C.accent : C.red }}>
-              {p.pnl >= 0 ? "↑" : "↓"}
-            </span>
+            }}>
+            {p.symbol}
+            {p.livePnl !== undefined && (
+              <span className="ml-1.5" style={{ color: (p.livePnl ?? 0) >= 0 ? C.accent : C.red }}>
+                {(p.livePnl ?? 0) >= 0 ? "↑" : "↓"}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Main panel */}
         <Card className="lg:col-span-2 p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-3xl font-extrabold font-mono" style={{ color: C.text }}>{pos.sym}</h2>
-                <Badge color={pos.signal.includes("STRONG") ? "accent" : pos.signal === "WEAK" ? "red" : "amber"}>{pos.signal}</Badge>
+                <h2 className="text-3xl font-extrabold font-mono" style={{ color: C.text }}>{pos.symbol}</h2>
+                <Badge color={pos.side === "LONG" ? "accent" : "red"}>{pos.side}</Badge>
+                {pos.grade && (
+                  <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-extrabold font-mono"
+                    style={{ background: C.accentDim, color: pos.grade.startsWith("A") ? C.accent : pos.grade === "B" ? C.blue : pos.grade === "C" ? C.amber : C.red }}>
+                    {pos.grade}
+                  </span>
+                )}
               </div>
-              <p className="text-sm mt-1 font-display" style={{ color: C.textDim }}>{pos.name} · {pos.sector}</p>
+              <p className="text-sm mt-1 font-mono" style={{ color: C.textDim }}>
+                Opened {pos.trade_date} · {pos.quantity} share{pos.quantity !== 1 ? "s" : ""}
+              </p>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-extrabold font-mono" style={{ color: C.text }}>${fmt(pos.current)}</p>
-              <p className="text-sm font-semibold font-mono mt-1" style={{ color: pos.pnl >= 0 ? C.accent : C.red }}>
-                {pos.pnl >= 0 ? "+" : ""}{pos.pnlPct.toFixed(2)}% · {pos.pnl >= 0 ? "+" : ""}${fmt(pos.pnl)}
+              {hasLive ? (
+                <>
+                  <p className="text-3xl font-extrabold font-mono" style={{ color: C.text }}>${fmt(pos.currentPrice!)}</p>
+                  <p className="text-sm font-semibold font-mono mt-1" style={{ color: isPositive ? C.accent : C.red }}>
+                    {isPositive ? "+" : ""}{pnlPct.toFixed(2)}% · {isPositive ? "+" : ""}${fmt(pnl)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-3xl font-extrabold font-mono" style={{ color: C.text }}>${fmt(pos.entry_price)}</p>
+                  <p className="text-sm font-mono mt-1" style={{ color: C.textDim }}>Entry price · Market closed</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Price visualization */}
+          <div className="rounded-lg p-4 mb-6" style={{ background: C.surface2 }}>
+            {hasLive ? (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] uppercase tracking-widest font-mono" style={{ color: C.textDim }}>Entry → Current</span>
+                  <span className="text-xs font-bold font-mono" style={{ color: isPositive ? C.accent : C.red }}>
+                    {isPositive ? "+" : ""}{pnlPct.toFixed(2)}%
+                  </span>
+                </div>
+                <div className="relative h-8 rounded-full overflow-hidden" style={{ background: C.surface3 }}>
+                  {/* Entry marker */}
+                  <div className="absolute top-0 bottom-0 w-0.5" style={{ left: "10%", background: C.amber }} />
+                  {/* Current price bar */}
+                  <div className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(95, Math.max(5, 10 + pnlPct * 3))}%`,
+                      background: isPositive ? `linear-gradient(90deg, ${C.accent}40, ${C.accent})` : `linear-gradient(90deg, ${C.red}40, ${C.red})`,
+                    }} />
+                </div>
+                <div className="flex justify-between mt-2 text-[10px] font-mono" style={{ color: C.textDim }}>
+                  <span>Entry: ${fmt(pos.entry_price)}</span>
+                  <span>Current: ${fmt(pos.currentPrice!)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="py-6 text-center">
+                <p className="text-xs font-display" style={{ color: C.textDim }}>Live price data available during market hours</p>
+              </div>
+            )}
+          </div>
+
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-3 rounded-lg" style={{ background: C.surface2 }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Quantity</p>
+              <p className="text-base font-bold font-mono" style={{ color: C.text }}>{pos.quantity}</p>
+            </div>
+            <div className="p-3 rounded-lg" style={{ background: C.surface2 }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Entry Price</p>
+              <p className="text-base font-bold font-mono" style={{ color: C.text }}>${fmt(pos.entry_price)}</p>
+            </div>
+            <div className="p-3 rounded-lg" style={{ background: C.surface2 }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>Position Size</p>
+              <p className="text-base font-bold font-mono" style={{ color: C.text }}>${fmtK(positionValue)}</p>
+            </div>
+            <div className="p-3 rounded-lg" style={{ background: C.surface2 }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>
+                {startingCapital > 0 ? "% of Capital" : "Unrealized P&L"}
+              </p>
+              <p className="text-base font-bold font-mono" style={{ color: startingCapital > 0 ? C.text : (isPositive ? C.accent : C.red) }}>
+                {startingCapital > 0 ? `${positionPct.toFixed(1)}%` : (hasLive ? `${isPositive ? "+" : ""}$${fmt(pnl)}` : "—")}
               </p>
             </div>
           </div>
 
-          <div className="rounded-lg p-4 mb-6" style={{ background: C.surface2 }}>
-            <svg width="100%" height="180" viewBox="0 0 500 180" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="tdGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={pos.pnl >= 0 ? C.accent : C.red} stopOpacity="0.15" />
-                  <stop offset="100%" stopColor={pos.pnl >= 0 ? C.accent : C.red} stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {(() => {
-                const seed = pos.sym.charCodeAt(0);
-                const pts = Array.from({ length: 50 }, (_, i) => {
-                  const trend = pos.pnl >= 0 ? -1.2 : 0.8;
-                  const y = 100 + trend * i + Math.sin(i * 0.4 + seed) * 18 + (Math.random() * 10 - 5);
-                  return `${i * 10.2},${Math.max(15, Math.min(165, y))}`;
-                });
-                return (
-                  <>
-                    <line x1="0" y1="90" x2="500" y2="90" stroke={C.border} strokeDasharray="4,4" />
-                    <polygon points={`0,180 ${pts.join(" ")} 500,180`} fill="url(#tdGrad)" />
-                    <polyline points={pts.join(" ")} fill="none" stroke={pos.pnl >= 0 ? C.accent : C.red} strokeWidth="2" />
-                  </>
-                );
-              })()}
-            </svg>
-            <div className="flex justify-between text-[10px] mt-2 font-mono" style={{ color: C.textDim }}>
-              <span>Entry: ${fmt(pos.entry)}</span>
-              <span>Current: ${fmt(pos.current)}</span>
+          {/* Notes */}
+          {pos.notes && (
+            <div className="mt-4 p-3 rounded-lg" style={{ background: C.surface2 }}>
+              <p className="text-[10px] uppercase tracking-widest mb-2 font-mono" style={{ color: C.textDim }}>Trade Notes</p>
+              <p className="text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>{pos.notes}</p>
             </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[
-              { l: "Quantity", v: String(pos.qty), c: undefined },
-              { l: "Entry Price", v: `$${fmt(pos.entry)}`, c: undefined },
-              { l: "Position Size", v: `$${fmtK(pos.qty * pos.entry)}`, c: undefined },
-              { l: "RSI (14)", v: String(pos.rsi), c: pos.rsi > 70 ? C.amber : pos.rsi < 30 ? C.red : C.accent },
-            ].map((s, i) => (
-              <div key={i} className="p-3 rounded-lg" style={{ background: C.surface2 }}>
-                <p className="text-[9px] uppercase tracking-widest mb-1 font-mono" style={{ color: C.textDim }}>{s.l}</p>
-                <p className="text-base font-bold font-mono" style={{ color: s.c || C.text }}>{s.v}</p>
-              </div>
-            ))}
-          </div>
+          {/* Tags */}
+          {pos.tags && pos.tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {pos.tags.map((tag) => <Badge key={tag} color="purple" size="xs">{tag}</Badge>)}
+            </div>
+          )}
         </Card>
 
+        {/* Side panels */}
         <div className="space-y-4">
+          {/* Live P&L Card */}
           <Card className="p-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Momentum Score</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>
+              {hasLive ? "Live P&L" : "Position Status"}
+            </h3>
             <div className="text-center mb-4">
-              <div
-                className="inline-flex items-center justify-center w-24 h-24 rounded-full"
+              <div className="inline-flex items-center justify-center w-24 h-24 rounded-full"
                 style={{
-                  border: `3px solid ${pos.momentum > 70 ? C.accent : pos.momentum > 40 ? C.amber : C.red}`,
-                  boxShadow: `0 0 20px ${pos.momentum > 70 ? C.accentGlow : "transparent"}`,
-                }}
-              >
-                <span
-                  className="text-3xl font-extrabold font-mono"
-                  style={{ color: pos.momentum > 70 ? C.accent : pos.momentum > 40 ? C.amber : C.red }}
-                >
-                  {pos.momentum}
-                </span>
+                  border: `3px solid ${hasLive ? (isPositive ? C.accent : C.red) : C.border}`,
+                  boxShadow: hasLive && isPositive ? `0 0 20px ${C.accentGlow}` : "none",
+                }}>
+                {hasLive ? (
+                  <span className="text-2xl font-extrabold font-mono" style={{ color: isPositive ? C.accent : C.red }}>
+                    {isPositive ? "+" : ""}{pnlPct.toFixed(1)}%
+                  </span>
+                ) : (
+                  <span className="text-lg font-bold font-mono" style={{ color: C.textDim }}>OPEN</span>
+                )}
               </div>
             </div>
-            <MomentumBar value={pos.momentum} />
+            {hasLive && <MomentumBar value={Math.min(100, Math.max(0, 50 + pnlPct * 5))} />}
           </Card>
 
+          {/* Risk Levels */}
           <Card className="p-5">
             <h3 className="text-xs font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Risk Levels</h3>
             <div className="space-y-3">
               {[
-                { l: "Stop Loss", v: `$${fmt(pos.entry * 0.95)}`, c: C.red },
-                { l: "Target 1 (1R)", v: `$${fmt(pos.entry * 1.05)}`, c: C.amber },
-                { l: "Target 2 (2R)", v: `$${fmt(pos.entry * 1.1)}`, c: C.accent },
-                { l: "Target 3 (3R)", v: `$${fmt(pos.entry * 1.15)}`, c: C.accent },
+                { l: "Stop Loss (5%)", v: `$${fmt(pos.entry_price * (pos.side === "LONG" ? 0.95 : 1.05))}`, c: C.red },
+                { l: "Target 1 (1R)", v: `$${fmt(pos.entry_price * (pos.side === "LONG" ? 1.05 : 0.95))}`, c: C.amber },
+                { l: "Target 2 (2R)", v: `$${fmt(pos.entry_price * (pos.side === "LONG" ? 1.10 : 0.90))}`, c: C.accent },
+                { l: "Target 3 (3R)", v: `$${fmt(pos.entry_price * (pos.side === "LONG" ? 1.15 : 0.85))}`, c: C.accent },
               ].map((r, i) => (
                 <div key={i} className="flex items-center justify-between p-2 rounded" style={{ background: C.surface2 }}>
                   <span className="text-[10px] uppercase tracking-wider font-mono" style={{ color: C.textDim }}>{r.l}</span>
@@ -1609,14 +1784,12 @@ function TradeDetailPage() {
             </div>
           </Card>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button className="py-3 rounded-lg text-xs font-bold uppercase tracking-wider font-mono" style={{ background: C.accentDim, color: C.accent, border: `1px solid rgba(0,212,170,0.2)` }}>
-              Add Size
-            </button>
-            <button className="py-3 rounded-lg text-xs font-bold uppercase tracking-wider font-mono" style={{ background: C.redDim, color: C.red, border: `1px solid rgba(255,71,87,0.2)` }}>
-              Close
-            </button>
-          </div>
+          {/* Actions */}
+          <button onClick={() => setPage("journal")}
+            className="w-full py-3 rounded-lg text-xs font-bold uppercase tracking-wider font-mono"
+            style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>
+            Edit in Journal
+          </button>
         </div>
       </div>
     </div>
@@ -2578,6 +2751,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<PageId>("dashboard");
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const [userName, setUserName] = useState<string>("");
 
   const supabase = createClient();
 
@@ -2591,6 +2765,9 @@ export default function Home() {
       if (session?.user) {
         const key = `mc_onboarded_${session.user.id}`;
         setOnboarded(localStorage.getItem(key) === "true");
+        // Fetch user name from profile
+        supabase.from("user_profiles").select("first_name").eq("id", session.user.id).single()
+          .then(({ data }) => { if (data?.first_name) setUserName(data.first_name); });
       }
     });
 
@@ -2639,7 +2816,7 @@ export default function Home() {
   const pages: Record<PageId, ReactNode> = {
     dashboard: <DashboardPage setPage={setPage} />,
     scanner: <ScannerPage />,
-    trade: <TradeDetailPage />,
+    trade: <TradeDetailPage setPage={setPage} />,
     rotation: <RotationPage />,
     journal: <JournalPage />,
     methodology: <MethodologyPage />,
@@ -2699,7 +2876,7 @@ export default function Home() {
 
   // Authenticated + onboarded — show app
   return (
-    <AppLayout page={page} setPage={setPage} onLogout={handleLogout} userEmail={user.email}>
+    <AppLayout page={page} setPage={setPage} onLogout={handleLogout} userEmail={user.email} userName={userName}>
       {pages[page]}
     </AppLayout>
   );
