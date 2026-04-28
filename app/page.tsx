@@ -1005,7 +1005,7 @@ function DashboardPage({ setPage }: { setPage: (p: PageId) => void }) {
 
         <Card className="p-4 lg:p-5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 font-mono" style={{ color: C.textDim }}>Daily P&L</p>
-          {todayEntries.length > 0 ? (
+          {dailyPnl !== 0 ? (
             <>
               <p className="text-xl lg:text-2xl font-bold font-mono" style={{ color: dailyPnl >= 0 ? C.accent : C.red }}>
                 {dailyPnl >= 0 ? "+" : ""}${fmtK(dailyPnl)}
