@@ -1,10 +1,17 @@
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// app/api/scanner/route.ts — Momentum Scanner API (FMP)
+// 600 stocks in 2 batch calls, ~2 second total scan time
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 import { NextResponse } from "next/server";
-import { batchGetQuotes } from "../../../lib/finnhub";
+import { batchGetQuotes } from "../../../lib/fmp";
 import { SCAN_UNIVERSE, processQuotes } from "../../../lib/scanner-engine";
-import type { ScannerApiResponse, ScannerApiError } from "../../../types/scanner";
+import type { ScannerApiResponse, ScannerApiError } from "../../../lib/scanner-engine";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 300;
+
+// ── In-memory cache ──────────────────────────────────────
 
 interface CacheEntry {
   data: ScannerApiResponse;
@@ -25,11 +32,13 @@ function setCachedResponse(data: ScannerApiResponse): void {
   memoryCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
 }
 
+// ── Route Handler ────────────────────────────────────────
+
 export async function GET(): Promise<NextResponse<ScannerApiResponse | ScannerApiError>> {
   try {
-    if (!process.env.FINNHUB_API_KEY) {
+    if (!process.env.FMP_API_KEY) {
       return NextResponse.json(
-        { success: false as const, error: "FINNHUB_API_KEY not configured", code: "MISSING_API_KEY" },
+        { success: false as const, error: "FMP_API_KEY not configured", code: "MISSING_API_KEY" },
         { status: 500 }
       );
     }
@@ -46,27 +55,22 @@ export async function GET(): Promise<NextResponse<ScannerApiResponse | ScannerAp
     const errors: string[] = [];
     const startTime = Date.now();
 
-    console.log(`[Scanner] Fetching quotes for ${symbols.length} symbols...`);
+    console.log(`[Scanner] Fetching batch quotes for ${symbols.length} symbols via FMP...`);
     const quotes = await batchGetQuotes(symbols);
 
-    for (const sym of symbols) {
-      if (!quotes.has(sym)) errors.push(`Quote fetch failed: ${sym}`);
+    const missed = symbols.filter((s) => !quotes.has(s));
+    if (missed.length > 0) {
+      errors.push(`${missed.length} symbols not returned by FMP`);
     }
 
-    console.log(`[Scanner] Got ${quotes.size}/${symbols.length} quotes. Scoring...`);
-
-    // Skip technicals to stay within Vercel Hobby 10s timeout
-    // Quotes alone provide 80% of the scoring (4 of 5 factors)
-    const technicals = new Map();
-
     const elapsed = Date.now() - startTime;
-    console.log(`[Scanner] Pipeline complete in ${elapsed}ms`);
+    console.log(`[Scanner] Got ${quotes.size}/${symbols.length} quotes in ${elapsed}ms. Scoring...`);
 
-    const { stocks, errors: processingErrors } = processQuotes(quotes, technicals, errors);
+    const { stocks, errors: processingErrors } = processQuotes(quotes, errors);
 
     if (stocks.length === 0) {
       return NextResponse.json(
-        { success: false as const, error: "No stocks fetched. Check FINNHUB_API_KEY.", code: "NO_DATA" },
+        { success: false as const, error: "No stocks fetched. Check FMP_API_KEY.", code: "NO_DATA" },
         { status: 502 }
       );
     }
@@ -98,7 +102,7 @@ export async function GET(): Promise<NextResponse<ScannerApiResponse | ScannerAp
     if (memoryCache) {
       return NextResponse.json(memoryCache.data, {
         status: 200,
-        headers: { "X-Scanner-Cache": "STALE", "X-Scanner-Error": "true" },
+        headers: { "X-Scanner-Cache": "STALE" },
       });
     }
 
