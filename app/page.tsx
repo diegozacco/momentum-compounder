@@ -2491,6 +2491,45 @@ function OnboardingPage({ onComplete }: { onComplete: (profile: { firstName: str
   const [experience, setExperience] = useState("");
   const [goal, setGoal] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [validatingCode, setValidatingCode] = useState(false);
+
+  const supabase = createClient();
+
+  const validateAndContinue = async () => {
+    if (!firstName || !lastName || !inviteCode) return;
+    setValidatingCode(true);
+    setCodeError(null);
+
+    const { data, error } = await supabase
+      .from("invite_codes")
+      .select("*")
+      .eq("code", inviteCode.toUpperCase().trim())
+      .eq("is_active", true)
+      .single();
+
+    if (error || !data) {
+      setCodeError("Invalid invite code. Check your code and try again.");
+      setValidatingCode(false);
+      return;
+    }
+
+    if (data.max_uses && data.current_uses >= data.max_uses) {
+      setCodeError("This invite code has reached its maximum uses.");
+      setValidatingCode(false);
+      return;
+    }
+
+    // Mark code as used (increment count)
+    await supabase
+      .from("invite_codes")
+      .update({ current_uses: (data.current_uses || 0) + 1, used_at: new Date().toISOString() })
+      .eq("id", data.id);
+
+    setValidatingCode(false);
+    setStep(2);
+  };
 
   const experienceLevels = [
     { value: "beginner", label: "Beginner", desc: "New to trading, still learning the basics" },
@@ -2553,15 +2592,33 @@ function OnboardingPage({ onComplete }: { onComplete: (profile: { firstName: str
                   onBlur={(e) => { e.target.style.borderColor = C.border; }}
                   placeholder="Zacco" />
               </div>
-              <button onClick={() => { if (firstName && lastName) setStep(2); }}
-                disabled={!firstName || !lastName}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-2 font-mono" style={{ color: C.textMuted }}>Invite Code</label>
+                <input type="text" value={inviteCode} onChange={(e) => { setInviteCode(e.target.value); setCodeError(null); }}
+                  className="w-full px-4 py-3 rounded-lg text-sm outline-none transition-all font-mono uppercase"
+                  style={{ background: C.surface2, border: `1px solid ${codeError ? C.red : C.border}`, color: C.text }}
+                  onFocus={(e) => { e.target.style.borderColor = codeError ? C.red : C.accent; }}
+                  onBlur={(e) => { e.target.style.borderColor = codeError ? C.red : C.border; }}
+                  placeholder="Enter your invite code"
+                  onKeyDown={(e) => e.key === "Enter" && validateAndContinue()} />
+                {codeError && (
+                  <p className="text-xs mt-1.5 font-mono" style={{ color: C.red }}>{codeError}</p>
+                )}
+              </div>
+              <button onClick={validateAndContinue}
+                disabled={!firstName || !lastName || !inviteCode || validatingCode}
                 className="w-full py-3.5 rounded-lg text-sm font-bold uppercase tracking-wider transition-all font-display mt-4"
                 style={{
-                  background: firstName && lastName ? `linear-gradient(135deg, ${C.accent}, #00b894)` : C.surface3,
-                  color: firstName && lastName ? "#000" : C.textDim,
-                  boxShadow: firstName && lastName ? `0 4px 20px ${C.accentGlow}` : "none",
+                  background: firstName && lastName && inviteCode && !validatingCode ? `linear-gradient(135deg, ${C.accent}, #00b894)` : C.surface3,
+                  color: firstName && lastName && inviteCode && !validatingCode ? "#000" : C.textDim,
+                  boxShadow: firstName && lastName && inviteCode && !validatingCode ? `0 4px 20px ${C.accentGlow}` : "none",
                 }}>
-                Continue
+                {validatingCode ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Validating...
+                  </span>
+                ) : "Continue"}
               </button>
             </div>
           </Card>
@@ -2710,7 +2767,7 @@ function MethodologyPage() {
             Momentum Compounder is built on a core principle: <span className="font-semibold" style={{ color: C.text }}>stocks in motion tend to stay in motion.</span> Academic research consistently demonstrates that securities exhibiting strong recent performance tend to continue outperforming over short-to-intermediate horizons.
           </p>
           <p>
-            Our scanner continuously evaluates a curated universe of 90 liquid, high-beta stocks across 11 sectors. Each stock receives a <span className="font-semibold" style={{ color: C.accent }}>composite Momentum Score from 0-100</span> based on five quantitative factors analyzed in real-time from market data.
+            Our scanner continuously evaluates a curated universe of 600 liquid, high-beta stocks across 11 sectors. Each stock receives a <span className="font-semibold" style={{ color: C.accent }}>composite Momentum Score from 0-100</span> based on five quantitative factors analyzed in real-time from market data.
           </p>
           <p>
             The system is designed to surface the strongest movers — stocks demonstrating the most conviction from buyers right now — ranked by relative strength so you can focus your research where it matters most.
@@ -2796,7 +2853,7 @@ function MethodologyPage() {
       <Card className="p-6 mb-6">
         <h2 className="text-sm font-bold uppercase tracking-wider mb-4 font-display" style={{ color: C.text }}>Data Pipeline</h2>
         <div className="space-y-3 text-xs leading-relaxed font-display" style={{ color: C.textMuted }}>
-          <p>Our scanner evaluates <span className="font-semibold" style={{ color: C.text }}>90 stocks across 11 sectors</span>, covering the most liquid and high-beta names in the U.S. equity market — from mega-cap leaders like AAPL, MSFT, and AMZN to high-momentum mid-caps like CRDO, AXON, and DECK.</p>
+          <p>Our scanner evaluates <span className="font-semibold" style={{ color: C.text }}>600 stocks across 11 sectors</span>, covering the most liquid and high-beta names in the U.S. equity market — from mega-cap leaders like AAPL, MSFT, and AMZN to high-momentum mid-caps like CRDO, AXON, and DECK.</p>
           <p>Data refreshes automatically every <span className="font-semibold" style={{ color: C.text }}>5 minutes</span> during market hours. Each refresh pulls live quotes and technical indicator aggregates, computes fresh scores, and ranks the top 30 by composite momentum.</p>
           <p>The universe is designed to capture momentum where it matters most — names with enough liquidity for meaningful participation and enough volatility to generate tradeable moves.</p>
         </div>
