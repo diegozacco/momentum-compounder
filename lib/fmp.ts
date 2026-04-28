@@ -1,19 +1,13 @@
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// lib/fmp.ts — Financial Modeling Prep API Client
-// Batch quotes: 600 stocks in 2-3 API calls (~1 second)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-const FMP_BASE_URL = "https://financialmodelingprep.com/api/v3";
+const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
-const BATCH_SIZE = 300; // FMP allows ~300 symbols per batch request
+const BATCH_SIZE = 100;
 
-/** Raw quote from FMP batch quote endpoint */
 export interface FmpQuote {
   symbol: string;
   name: string;
   price: number;
-  changesPercentage: number;
+  changePercentage: number;
   change: number;
   dayLow: number;
   dayHigh: number;
@@ -24,21 +18,14 @@ export interface FmpQuote {
   priceAvg200: number;
   exchange: string;
   volume: number;
-  avgVolume: number;
   open: number;
   previousClose: number;
-  eps: number;
-  pe: number;
   timestamp: number;
 }
 
 function getApiKey(): string {
   const key = process.env.FMP_API_KEY;
-  if (!key) {
-    throw new Error(
-      "[FMP] FMP_API_KEY is not set. Add it to your environment variables."
-    );
-  }
+  if (!key) throw new Error("[FMP] FMP_API_KEY is not set.");
   return key;
 }
 
@@ -56,16 +43,10 @@ async function fetchWithTimeout(url: string, timeoutMs: number = REQUEST_TIMEOUT
   }
 }
 
-/**
- * Fetch batch quotes from FMP.
- * FMP's /quote endpoint accepts comma-separated symbols.
- * We chunk into batches of 300 to stay safe.
- */
 export async function batchGetQuotes(symbols: string[]): Promise<Map<string, FmpQuote>> {
   const apiKey = getApiKey();
   const results = new Map<string, FmpQuote>();
 
-  // Split symbols into chunks
   const chunks: string[][] = [];
   for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
     chunks.push(symbols.slice(i, i + BATCH_SIZE));
@@ -73,16 +54,10 @@ export async function batchGetQuotes(symbols: string[]): Promise<Map<string, Fmp
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      // Fetch all chunks in parallel
       const promises = chunks.map(async (chunk) => {
         const symbolList = chunk.join(",");
-        const url = `${FMP_BASE_URL}/quote/${symbolList}?apikey=${apiKey}`;
+        const url = `${FMP_BASE_URL}/quote?symbol=${symbolList}&apikey=${apiKey}`;
         const response = await fetchWithTimeout(url);
-
-        if (response.status === 429) {
-          console.warn("[FMP] Rate limited, retrying...");
-          return [];
-        }
 
         if (!response.ok) {
           console.error(`[FMP] HTTP ${response.status}: ${response.statusText}`);
@@ -103,22 +78,9 @@ export async function batchGetQuotes(symbols: string[]): Promise<Map<string, Fmp
         }
       }
 
-      // If we got results, return
       if (results.size > 0) return results;
 
-      // No results — retry
       if (attempt < MAX_RETRIES) {
         await sleep(1500);
         continue;
       }
-    } catch (error) {
-      console.error(`[FMP] Fetch error (attempt ${attempt + 1}):`, error);
-      if (attempt < MAX_RETRIES) {
-        await sleep(1500);
-        continue;
-      }
-    }
-  }
-
-  return results;
-}
