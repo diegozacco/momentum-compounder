@@ -25,7 +25,9 @@ export interface FmpQuote {
 
 function getApiKey(): string {
   const key = process.env.FMP_API_KEY;
-  if (!key) throw new Error("[FMP] FMP_API_KEY is not set.");
+  if (!key) {
+    throw new Error("[FMP] FMP_API_KEY is not set.");
+  }
   return key;
 }
 
@@ -33,7 +35,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -43,7 +48,9 @@ async function fetchWithTimeout(url: string, timeoutMs: number = REQUEST_TIMEOUT
   }
 }
 
-export async function batchGetQuotes(symbols: string[]): Promise<Map<string, FmpQuote>> {
+export async function batchGetQuotes(
+  symbols: string[]
+): Promise<Map<string, FmpQuote>> {
   const apiKey = getApiKey();
   const results = new Map<string, FmpQuote>();
 
@@ -84,3 +91,14 @@ export async function batchGetQuotes(symbols: string[]): Promise<Map<string, Fmp
         await sleep(1500);
         continue;
       }
+    } catch (error) {
+      console.error(`[FMP] Fetch error (attempt ${attempt + 1}):`, error);
+      if (attempt < MAX_RETRIES) {
+        await sleep(1500);
+        continue;
+      }
+    }
+  }
+
+  return results;
+}
