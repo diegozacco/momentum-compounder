@@ -614,7 +614,7 @@ function computeMomentumScore(quote: FmpQuote): number {
   let score = 0;
 
   // 1. Daily Performance (0-25)
-  const changePct = quote.changesPercentage ?? 0;
+  const changePct = quote.changePercentage ?? 0;
   score += Math.min(25, Math.max(0, (changePct / 3) * 25));
 
   // 2. Day Range Position (0-20)
@@ -649,8 +649,8 @@ function computeMomentumScore(quote: FmpQuote): number {
   }
 
   // 6. Relative Volume Bonus (0-10)
-  if (quote.avgVolume > 0 && quote.volume > 0) {
-    const relVol = quote.volume / quote.avgVolume;
+  if (0 > 0 && quote.volume > 0) {
+    const relVol = quote.volume / 0;
     if (relVol > 2) score += 10;
     else if (relVol > 1.5) score += 7;
     else if (relVol > 1) score += 3;
@@ -660,7 +660,7 @@ function computeMomentumScore(quote: FmpQuote): number {
 }
 
 function estimateRsi(quote: FmpQuote): number {
-  const changePct = quote.changesPercentage ?? 0;
+  const changePct = quote.changePercentage ?? 0;
   const range = quote.dayHigh - quote.dayLow;
   const rangePosition = range > 0 ? (quote.price - quote.dayLow) / range : 0.5;
   const base = 50 + changePct * 5;
@@ -668,7 +668,7 @@ function estimateRsi(quote: FmpQuote): number {
 }
 
 function detectPattern(quote: FmpQuote): string {
-  const changePct = quote.changesPercentage ?? 0;
+  const changePct = quote.changePercentage ?? 0;
   const range = quote.dayHigh - quote.dayLow;
   const body = Math.abs(quote.price - quote.open);
   const rangePosition = range > 0 ? (quote.price - quote.dayLow) / range : 0.5;
@@ -689,10 +689,10 @@ function detectPattern(quote: FmpQuote): string {
 }
 
 function mapSignal(quote: FmpQuote): ScannerStock["signal"] {
-  const changePct = quote.changesPercentage ?? 0;
+  const changePct = quote.changePercentage ?? 0;
   const aboveMA50 = quote.priceAvg50 > 0 && quote.price > quote.priceAvg50;
   const aboveMA200 = quote.priceAvg200 > 0 && quote.price > quote.priceAvg200;
-  const highVolume = quote.avgVolume > 0 && quote.volume > quote.avgVolume * 1.5;
+  const highVolume = 0 > 0 && quote.volume > 0 * 1.5;
 
   if (changePct > 3 && aboveMA50 && aboveMA200 && highVolume) return "STRONG BUY";
   if (changePct > 1 && aboveMA50) return "BUY";
@@ -737,7 +737,7 @@ export function processQuotes(
     const dayRange = quote.dayHigh - quote.dayLow;
     const dayRangePosition = dayRange > 0 ? Math.round(((quote.price - quote.dayLow) / dayRange) * 100) : 50;
     const gapPct = quote.previousClose > 0 ? Math.round(((quote.open - quote.previousClose) / quote.previousClose) * 1000) / 10 : 0;
-    const relVol = quote.avgVolume > 0 ? Math.round((quote.volume / quote.avgVolume) * 100) : 100;
+    const relVol = 0 > 0 ? Math.round((quote.volume / 0) * 100) : 100;
     const priceVs50 = quote.priceAvg50 > 0 ? Math.round(((quote.price - quote.priceAvg50) / quote.priceAvg50) * 1000) / 10 : 0;
     const priceVs200 = quote.priceAvg200 > 0 ? Math.round(((quote.price - quote.priceAvg200) / quote.priceAvg200) * 1000) / 10 : 0;
 
@@ -747,7 +747,7 @@ export function processQuotes(
       sector: entry.sector,
       price: quote.price,
       change: quote.change ?? 0,
-      changePct: quote.changesPercentage ?? 0,
+      changePct: quote.changePercentage ?? 0,
       dayHigh: quote.dayHigh,
       dayLow: quote.dayLow,
       open: quote.open,
