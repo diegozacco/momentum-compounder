@@ -1,7 +1,7 @@
 const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50;
 
 export interface FmpQuote {
   symbol: string;
